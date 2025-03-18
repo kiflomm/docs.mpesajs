@@ -1,0 +1,197 @@
+## Installation
+
+To install the MpesaJS SDK, you can use npm:
+
+```bash
+npm install mpesajs
+```
+
+## Configuration
+
+The SDK can be configured using environment variables. You can use the built-in CLI tool to initialize the configuration:
+
+```bash
+# For test environment
+npx mpesajs init-test
+
+# For live environment
+npx mpesajs init-live
+```
+
+By default, the SDK uses `.env.mpesajs` file to keep settings separate. If you prefer to use the default `.env` file, add the `--default-env` flag:
+
+```bash
+npx mpesajs init-test --default-env
+```
+
+### Environment Variables
+
+The following environment variables are used by the SDK:
+
+```env
+# Authentication
+MPESA_CONSUMER_KEY=your_consumer_key
+MPESA_CONSUMER_SECRET=your_consumer_secret
+MPESA_SANDBOX=true  # Set to false for production
+MPESA_BUSINESS_SHORTCODE=your_shortcode
+MPESA_PASSKEY=your_passkey
+MPESA_PHONE_NUMBER=251700000000
+
+# URLs
+MPESA_CONFIRMATION_URL=https://your-domain.com/confirmation
+MPESA_VALIDATION_URL=https://your-domain.com/validation
+MPESA_QUEUE_TIMEOUT_URL=https://your-domain.com/timeout
+MPESA_RESULT_URL=https://your-domain.com/result
+
+# Other Settings
+MPESA_INITIATOR_NAME=your_initiator_name
+MPESA_SECURITY_CREDENTIAL=your_security_credential
+```
+
+## Core Features
+
+### Authentication
+
+The `Auth` class handles authentication with the M-Pesa API by generating access tokens:
+
+```typescript
+import { Auth } from 'mpesajs';
+
+// Create an Auth instance
+const auth = new Auth();
+// Or with custom credentials
+const auth = new Auth('your_consumer_key', 'your_consumer_secret', true); // true for sandbox
+
+// Generate token
+const { token, expiresIn } = await auth.generateToken();
+```
+
+### STK Push
+
+The `StkPush` class allows you to initiate payment requests to customers' phones:
+
+```typescript
+import { Auth, StkPush } from 'mpesajs';
+
+const auth = new Auth();
+const stkPush = new StkPush(auth);
+
+try {
+  const result = await stkPush.sendStkPush(
+    '174379', // Business Shortcode
+    'your-passkey',
+    100, // Amount
+    '251712345678', // Phone Number
+    'https://your-domain.com/callback',
+    'INV001', // Account Reference
+    'Payment for X' // Transaction Description
+  );
+  
+  console.log('Payment initiated:', result);
+} catch (error) {
+  console.error('Payment failed:', error);
+}
+```
+
+### Register URLs
+
+The `RegisterUrl` class helps you register your confirmation and validation URLs:
+
+```typescript
+import { RegisterUrl } from 'mpesajs';
+
+const register = new RegisterUrl();
+
+try {
+  const response = await register.register(
+    'your-shortcode',
+    'Completed', // Response Type
+    'RegisterURL', // Command ID
+    'https://your-domain.com/confirmation',
+    'https://your-domain.com/validation'
+  );
+  
+  console.log('URLs registered:', response);
+} catch (error) {
+  console.error('Registration failed:', error);
+}
+```
+
+### Payout (B2C)
+
+The `Payout` class handles Business-to-Customer (B2C) payments:
+
+```typescript
+import { Auth, Payout } from 'mpesajs';
+
+const auth = new Auth();
+const payout = new Payout(auth);
+
+try {
+  const response = await payout.send(
+    100, // Amount
+    'Salary payment', // Remarks
+    'March 2024', // Occasion
+    'BusinessPayment', // Command ID
+    'your-shortcode',
+    '251712345678', // Phone Number
+    'https://your-domain.com/timeout',
+    'https://your-domain.com/result'
+  );
+  
+  console.log('Payout successful:', response);
+} catch (error) {
+  console.error('Payout failed:', error);
+}
+```
+
+## Error Handling
+
+The SDK provides several error classes for different types of errors:
+
+```typescript
+import {
+  MpesaError,
+  AuthenticationError,
+  NetworkError,
+  ValidationError,
+  StkPushError,
+  PayoutError,
+  RegisterUrlError
+} from 'mpesajs';
+
+try {
+  // Your SDK operation here
+} catch (error) {
+  if (error instanceof AuthenticationError) {
+    console.error('Authentication failed:', error.message);
+  } else if (error instanceof ValidationError) {
+    console.error('Validation error:', error.message);
+  } else if (error instanceof NetworkError) {
+    console.error('Network error:', error.message);
+  } else if (error instanceof MpesaError) {
+    console.error('M-Pesa error:', error.message);
+  }
+}
+```
+
+## Rate Limiting and Retries
+
+The SDK includes built-in rate limiting and retry mechanisms. You can configure these using environment variables:
+
+```env
+MPESAJS_MAX_RETRIES=3
+MPESAJS_INITIAL_DELAY_MS=1000
+MPESAJS_MAX_DELAY_MS=10000
+MPESAJS_BACKOFF_FACTOR=2
+MPESAJS_MAX_CONCURRENT=1000
+MPESAJS_TIME_WINDOW_MS=60000
+```
+
+These settings control:
+- Maximum retry attempts
+- Initial delay before first retry
+- Maximum delay between retries
+- Exponential backoff multiplier
+- Maximum concurrent requests
+- Time window for rate limiting
