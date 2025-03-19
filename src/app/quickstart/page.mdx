@@ -1,197 +1,228 @@
-## Installation
+import { Callout } from 'nextra/components'
+import { Steps } from 'nextra/components'
+import { Tabs } from 'nextra/components'
 
-To install the MpesaJS SDK, you can use npm:
+# 🚀 Getting Started with MpesaJS
 
-```bash
-npm install mpesajs
-```
+Welcome to MpesaJS! This guide will help you set up and configure the SDK for your project. Whether you're using it for development or production, we've got you covered.
 
-## Configuration
+## 📦 Installation
 
-The SDK can be configured using environment variables. You can use the built-in CLI tool to initialize the configuration:
+<Callout type="info" emoji="💡">
+  Install MpesaJS using your preferred package manager:
+</Callout>
 
-```bash
-# For test environment
-npx mpesajs init-test
+<Tabs items={['npm', 'yarn', 'pnpm']}>
+  <Tabs.Tab>
+    ```bash
+    npm install mpesajs
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    yarn add mpesajs
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    pnpm add mpesajs
+    ```
+  </Tabs.Tab>
+</Tabs>
 
-# For live environment
-npx mpesajs init-live
-```
+## 🛠️ Configuration Setup
 
-By default, the SDK uses `.env.mpesajs` file to keep settings separate. If you prefer to use the default `.env` file, add the `--default-env` flag:
+MpesaJS provides a powerful CLI tool that automates your environment setup. You can initialize either a test environment with pre-configured credentials or a live environment with placeholders for your production credentials.
 
-```bash
-npx mpesajs init-test --default-env
-```
+### CLI Commands Overview
 
-### Environment Variables
+<Tabs items={['Basic Commands', 'Options', 'Examples']}>
+  <Tabs.Tab>
+    ```bash
+    # Initialize test environment
+    npx mpesajs init-test
 
-The following environment variables are used by the SDK:
+    # Initialize live environment
+    npx mpesajs init-live
+
+    # View help
+    npx mpesajs --help
+
+    # Check version
+    npx mpesajs --version
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    # Available Options:
+    --default-env    # Use .env instead of .env.mpesajs
+    --help, -h      # Show help information
+    --version, -v   # Show SDK version
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash
+    # Setup test environment in .env.mpesajs
+    npx mpesajs init-test
+
+    # Setup test environment in .env
+    npx mpesajs init-test --default-env
+
+    # Setup live environment with custom env
+    npx mpesajs init-live
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Environment File Management
+
+<Callout type="default" emoji="📝">
+  By default, MpesaJS uses a dedicated `.env.mpesajs` file to keep your SDK configuration separate from other environment variables. This approach helps maintain a clean separation of concerns in your project.
+</Callout>
+
+<Steps>
+### Choose Environment File
+- `.env.mpesajs` (Recommended): Keeps SDK settings isolated
+- `.env` (Alternative): Use with `--default-env` flag if you prefer consolidating all environment variables
+
+### Select Environment Type
+- Test Environment: Pre-configured sandbox credentials
+- Live Environment: Production-ready configuration template
+
+### Configure Settings
+Update the generated environment variables based on your needs
+</Steps>
+
+## 🔐 Environment Variables Reference
+
+### Authentication Variables
+
+<Callout type="warning" emoji="🔑">
+  These variables are crucial for establishing secure communication with the M-Pesa API:
+</Callout>
+
+<Tabs items={['Test Environment', 'Live Environment']}>
+  <Tabs.Tab>
+    ```env {4}
+    # Core Authentication
+    MPESA_CONSUMER_KEY=your_live_consumer_key
+    MPESA_CONSUMER_SECRET=your_live_consumer_secret
+    MPESA_SANDBOX=true
+    
+    # Business Configuration
+    MPESA_BUSINESS_SHORTCODE=your_live_shortcode
+    MPESA_PASSKEY=your_live_passkey
+    MPESA_PHONE_NUMBER=255712345678
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```env {4}
+    # Core Authentication
+    MPESA_CONSUMER_KEY=your_live_consumer_key
+    MPESA_CONSUMER_SECRET=your_live_consumer_secret
+    MPESA_SANDBOX=false
+    
+    # Business Configuration
+    MPESA_BUSINESS_SHORTCODE=your_live_shortcode
+    MPESA_PASSKEY=your_live_passkey
+    MPESA_PHONE_NUMBER=255712345678
+    ```
+  </Tabs.Tab>
+</Tabs>
+
+### Callback URLs
+
+<Callout type="info" emoji="🔄">
+  Configure these endpoints to handle M-Pesa API responses:
+</Callout>
 
 ```env
-# Authentication
-MPESA_CONSUMER_KEY=your_consumer_key
-MPESA_CONSUMER_SECRET=your_consumer_secret
-MPESA_SANDBOX=true  # Set to false for production
-MPESA_BUSINESS_SHORTCODE=your_shortcode
-MPESA_PASSKEY=your_passkey
-MPESA_PHONE_NUMBER=251700000000
-
-# URLs
+# API Callback URLs
 MPESA_CONFIRMATION_URL=https://your-domain.com/confirmation
 MPESA_VALIDATION_URL=https://your-domain.com/validation
 MPESA_QUEUE_TIMEOUT_URL=https://your-domain.com/timeout
 MPESA_RESULT_URL=https://your-domain.com/result
-
-# Other Settings
-MPESA_INITIATOR_NAME=your_initiator_name
-MPESA_SECURITY_CREDENTIAL=your_security_credential
 ```
 
-## Core Features
+### Command Settings
 
-### Authentication
-
-The `Auth` class handles authentication with the M-Pesa API by generating access tokens:
-
-```typescript
-import { Auth } from 'mpesajs';
-
-// Create an Auth instance
-const auth = new Auth();
-// Or with custom credentials
-const auth = new Auth('your_consumer_key', 'your_consumer_secret', true); // true for sandbox
-
-// Generate token
-const { token, expiresIn } = await auth.generateToken();
-```
-
-### STK Push
-
-The `StkPush` class allows you to initiate payment requests to customers' phones:
-
-```typescript
-import { Auth, StkPush } from 'mpesajs';
-
-const auth = new Auth();
-const stkPush = new StkPush(auth);
-
-try {
-  const result = await stkPush.sendStkPush(
-    '174379', // Business Shortcode
-    'your-passkey',
-    100, // Amount
-    '251712345678', // Phone Number
-    'https://your-domain.com/callback',
-    'INV001', // Account Reference
-    'Payment for X' // Transaction Description
-  );
-  
-  console.log('Payment initiated:', result);
-} catch (error) {
-  console.error('Payment failed:', error);
-}
-```
-
-### Register URLs
-
-The `RegisterUrl` class helps you register your confirmation and validation URLs:
-
-```typescript
-import { RegisterUrl } from 'mpesajs';
-
-const register = new RegisterUrl();
-
-try {
-  const response = await register.register(
-    'your-shortcode',
-    'Completed', // Response Type
-    'RegisterURL', // Command ID
-    'https://your-domain.com/confirmation',
-    'https://your-domain.com/validation'
-  );
-  
-  console.log('URLs registered:', response);
-} catch (error) {
-  console.error('Registration failed:', error);
-}
-```
-
-### Payout (B2C)
-
-The `Payout` class handles Business-to-Customer (B2C) payments:
-
-```typescript
-import { Auth, Payout } from 'mpesajs';
-
-const auth = new Auth();
-const payout = new Payout(auth);
-
-try {
-  const response = await payout.send(
-    100, // Amount
-    'Salary payment', // Remarks
-    'March 2024', // Occasion
-    'BusinessPayment', // Command ID
-    'your-shortcode',
-    '251712345678', // Phone Number
-    'https://your-domain.com/timeout',
-    'https://your-domain.com/result'
-  );
-  
-  console.log('Payout successful:', response);
-} catch (error) {
-  console.error('Payout failed:', error);
-}
-```
-
-## Error Handling
-
-The SDK provides several error classes for different types of errors:
-
-```typescript
-import {
-  MpesaError,
-  AuthenticationError,
-  NetworkError,
-  ValidationError,
-  StkPushError,
-  PayoutError,
-  RegisterUrlError
-} from 'mpesajs';
-
-try {
-  // Your SDK operation here
-} catch (error) {
-  if (error instanceof AuthenticationError) {
-    console.error('Authentication failed:', error.message);
-  } else if (error instanceof ValidationError) {
-    console.error('Validation error:', error.message);
-  } else if (error instanceof NetworkError) {
-    console.error('Network error:', error.message);
-  } else if (error instanceof MpesaError) {
-    console.error('M-Pesa error:', error.message);
-  }
-}
-```
-
-## Rate Limiting and Retries
-
-The SDK includes built-in rate limiting and retry mechanisms. You can configure these using environment variables:
+<Callout type="default" emoji="⚙️">
+  These settings control specific M-Pesa operations:
+</Callout>
 
 ```env
-MPESAJS_MAX_RETRIES=3
-MPESAJS_INITIAL_DELAY_MS=1000
-MPESAJS_MAX_DELAY_MS=10000
-MPESAJS_BACKOFF_FACTOR=2
-MPESAJS_MAX_CONCURRENT=1000
-MPESAJS_TIME_WINDOW_MS=60000
+MPESA_PAYOUT_COMMAND_ID=BusinessPayment
+MPESA_REGISTER_URL_COMMAND_ID=RegisterURL
+MPESA_REGISTER_URL_RESPONSE_TYPE=Completed
 ```
 
-These settings control:
-- Maximum retry attempts
-- Initial delay before first retry
-- Maximum delay between retries
-- Exponential backoff multiplier
-- Maximum concurrent requests
-- Time window for rate limiting
+### Performance Optimization
+
+<Callout type="success" emoji="⚡">
+  Fine-tune your SDK's performance with these advanced settings:
+</Callout>
+
+```env
+# Rate Limiting Configuration
+MPESAJS_MAX_RETRIES=3           # Maximum retry attempts for failed requests
+MPESAJS_INITIAL_DELAY_MS=1000   # Initial retry delay in milliseconds
+MPESAJS_MAX_DELAY_MS=10000      # Maximum delay between retries
+MPESAJS_BACKOFF_FACTOR=2        # Exponential backoff multiplier
+MPESAJS_MAX_CONCURRENT=1000     # Maximum concurrent API requests
+MPESAJS_TIME_WINDOW_MS=60000    # Rate limiting time window
+```
+
+## 📝 Best Practices
+
+<Steps>
+### Environment Separation
+Keep your SDK configuration isolated in `.env.mpesajs` for better maintainability and security.
+
+### Version Control Safety
+Add both `.env` and `.env.mpesajs` to your `.gitignore` to prevent accidentally committing sensitive credentials.
+
+### Credential Management
+- Never commit real credentials to version control
+- Rotate your API keys periodically
+- Use different credentials for test and production environments
+
+### Environment Management
+Maintain separate configuration files for:
+- Local Development
+- Testing/Staging
+- Production
+</Steps>
+
+## 🎯 Next Steps
+
+<Callout type="success" emoji="✨">
+Ready to start building? Follow these steps to get your integration up and running:
+</Callout>
+
+<Steps>
+### Verify Installation
+Ensure MpesaJS is properly installed in your project
+
+### Configure Environment
+Run the appropriate initialization command and update credentials:
+```bash
+npx mpesajs init-test  # For development
+npx mpesajs init-live  # For production
+```
+
+### Test Integration
+Validate your setup using the sandbox environment:
+- Test API authentication
+- Verify callback URLs
+- Monitor rate limiting behavior
+
+### Implementation
+Start implementing M-Pesa features in your application:
+- Payment processing
+- Transaction status checks
+- Callback handling
+</Steps>
+
+<Callout type="info" emoji="💡">
+  Need help? Check out our [API Reference](/api-reference) or join our [Community](/community) for support!
+</Callout>

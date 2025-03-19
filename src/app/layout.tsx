@@ -1,4 +1,4 @@
-import { Footer, Layout, Navbar } from 'nextra-theme-docs'
+import { Footer, Layout, Link, Navbar } from 'nextra-theme-docs'
 import { Banner, Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
 import 'nextra-theme-docs/style.css'
@@ -7,13 +7,33 @@ export const metadata = {
   title: "mpesajs V 1.0"
 }
 
-const banner = <Banner storageKey="some-key">Mpesajs 1.0 is released 🎉</Banner>
+const banner = <Banner storageKey='mpesajs-banner'>Mpesajs 1.0 is released 🎉</Banner>
 const navbar = (
   <Navbar
     logo={<b>Mpesajs</b>}
-  />
+    projectLink='https://github.com/kiflomm/mpesajs'
+  >
+    <Link className="nx-p-2" href="https://linkedin.com/in/kiflom-berihu" target="_blank">LinkedIn</Link>
+    <Link className="nx-p-2" href="https://t.me/Brogrammer_kiflom" target="_blank">Chat</Link>
+  </Navbar>
 )
-const footer = <Footer>MIT {new Date().getFullYear()} © Nextra.</Footer>
+
+// Custom styles for the footer
+const footerStyle = {
+  display: 'flex',
+  justifyContent: 'center',
+  alignItems: 'center',
+  width: '100%',
+  textAlign: 'center' as const
+}
+
+const footer = (
+  <Footer className="nx-py-4">
+    <div style={footerStyle}>
+      Created with ❤️ by Kiflom Berihu | Fullstack Developer & API Specialist | {new Date().getFullYear()}. 😊
+    </div>
+  </Footer>
+)
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   return (

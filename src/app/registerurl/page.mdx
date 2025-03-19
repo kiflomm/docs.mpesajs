@@ -1,0 +1,165 @@
+# URL Registration
+
+The URL registration module provides functionality to register confirmation and validation URLs for M-Pesa API callbacks. This documentation covers the `RegisterUrl` class and its methods for managing URL registration.
+
+## RegisterUrl Class
+
+The `RegisterUrl` class is responsible for registering callback URLs that M-Pesa will use to send transaction notifications and validation requests.
+
+### Constructor
+
+Creates a new instance of the RegisterUrl class. The parameters can be automatically populated from environment variables when using the CLI tool for initialization.
+
+#### Parameters:
+
+- `apiKey`: M-Pesa API key for authentication. Defaults to `MPESA_CONSUMER_KEY` environment variable.
+- `sandbox`: Boolean flag to determine the environment. Defaults to `MPESA_SANDBOX` environment variable.
+
+#### Example
+
+```typescript
+// When project is initialized using CLI, environment variables are automatically used
+const registerUrl = new RegisterUrl(
+    process.env.MPESA_CONSUMER_KEY,
+    process.env.MPESA_SANDBOX === 'true'
+);
+
+// Direct initialization with credentials
+const registerUrl = new RegisterUrl(
+    'your-api-key',
+    true // true for sandbox, false for production
+);
+```
+
+### Methods
+
+#### register()
+
+```typescript
+public async register(
+    shortCode?: string,
+    responseType?: 'Completed' | 'Cancelled',
+    commandId?: 'RegisterURL',
+    confirmationUrl?: string,
+    validationUrl?: string
+): Promise<RegisterUrlResponse>
+```
+
+Registers validation and confirmation URLs with M-Pesa. This method handles:
+
+1. URL validation
+2. Payload construction
+3. API request
+4. Response parsing
+5. Rate limiting
+
+##### Parameters
+
+- `shortCode`: Business short code or PayBill number (defaults to `MPESA_BUSINESS_SHORTCODE` env var)
+- `responseType`: Type of response expected (defaults to `MPESA_REGISTER_URL_RESPONSE_TYPE` env var)
+- `commandId`: Command identifier (defaults to `MPESA_REGISTER_URL_COMMAND_ID` env var)
+- `confirmationUrl`: HTTPS URL for successful transaction confirmations (defaults to `MPESA_CONFIRMATION_URL` env var)
+- `validationUrl`: HTTPS URL for transaction validation (defaults to `MPESA_VALIDATION_URL` env var)
+
+##### Returns
+
+An object containing:
+- `responseCode`: Status code from the M-Pesa API
+- `responseMessage`: Detailed message about the registration status
+- `customerMessage`: User-friendly message about the registration
+- `timestamp`: When the registration was processed
+
+##### Example
+
+```typescript
+try {
+    const registerUrl = new RegisterUrl();
+    const result = await registerUrl.register(
+        '123456', // shortCode
+        'Completed', // responseType
+        'RegisterURL', // commandId
+        'https://example.com/confirm',
+        'https://example.com/validate'
+    );
+    console.log('URLs registered:', result);
+} catch (error) {
+    console.error('Registration failed:', error.message);
+}
+```
+
+## Error Handling
+
+The URL registration module includes comprehensive error handling:
+
+### ValidationError
+Thrown when:
+- URLs don't use HTTPS protocol
+- Invalid URL formats
+- Missing required parameters
+
+### RegisterUrlError
+Specific to URL registration failures:
+- API response errors
+- Registration processing issues
+- Invalid credentials
+
+### NetworkError
+Thrown for network-related issues:
+- Connection failures
+- Timeout errors
+- No response from API
+
+### Example Error Handling
+
+```typescript
+try {
+    const result = await registerUrl.register();
+    console.log('Success:', result);
+} catch (error) {
+    if (error instanceof ValidationError) {
+        console.error('Validation failed:', error.message);
+    } else if (error instanceof RegisterUrlError) {
+        console.error('Registration failed:', error.message);
+    } else if (error instanceof NetworkError) {
+        console.error('Network error:', error.message);
+    } else {
+        console.error('Unexpected error:', error.message);
+    }
+}
+```
+
+## Rate Limiting
+
+The module includes built-in rate limiting through the `RateLimiter` class to prevent:
+- Excessive registration attempts
+- API throttling
+- Service blocking
+
+## Environment Variables
+
+The RegisterUrl module uses these environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MPESA_CONSUMER_KEY` | M-Pesa API key | - |
+| `MPESA_SANDBOX` | Use sandbox environment | "true" |
+| `MPESA_BUSINESS_SHORTCODE` | Business shortcode | - |
+| `MPESA_REGISTER_URL_RESPONSE_TYPE` | Response type | "Completed" |
+| `MPESA_REGISTER_URL_COMMAND_ID` | Command ID | "RegisterURL" |
+| `MPESA_CONFIRMATION_URL` | Confirmation URL | - |
+| `MPESA_VALIDATION_URL` | Validation URL | - |
+
+## Best Practices
+
+1. **HTTPS**: Always use HTTPS URLs for callbacks
+2. **Error Handling**: Implement proper error handling for all registration attempts
+3. **Testing**: Test URLs thoroughly before registration
+4. **Monitoring**: Monitor callback endpoints for proper operation
+5. **Security**: Secure callback endpoints with proper authentication
+
+## API Endpoints
+
+The module uses these endpoints based on environment:
+
+- Sandbox: `https://apisandbox.safaricom.et/v1/c2b-register-url/register`
+- Production: `https://api.safaricom.et/v1/c2b-register-url/register`

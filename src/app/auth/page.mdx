@@ -1,32 +1,143 @@
-# Auth Page
+# Authentication
 
-Welcome to the authentication page of our application. Here, you can find information on how to log in, register, and manage your account.
+The authentication module provides functionality to handle OAuth token generation for the M-Pesa API. This documentation covers the `Auth` class and its methods for managing API authentication.
 
-## Login
+## Auth Class
 
-To log in, please enter your credentials below:
+The `Auth` class is responsible for handling authentication with the M-Pesa API by generating access tokens using consumer credentials.
 
-- **Email:** Your registered email address.
-- **Password:** Your account password.
+### Constructor
 
-Make sure to keep your password secure and do not share it with anyone.
+Creates a new instance of the Auth class. The parameters are required, but when initializing your project using the CLI tool, these values can be automatically populated from environment variables.
 
-## Registration
+#### Parameters:
 
-If you do not have an account, you can register by providing the following information:
+- `consumerKey`: Your M-Pesa consumer key. When using CLI initialization, defaults to `MPESA_CONSUMER_KEY` environment variable.
+- `consumerSecret`: Your M-Pesa consumer secret. When using CLI initialization, defaults to `MPESA_CONSUMER_SECRET` environment variable.
+- `sandbox`: Boolean flag to determine the environment. When using CLI initialization, defaults to the value of `MPESA_SANDBOX` environment variable.
 
-- **Name:** Your full name.
-- **Email:** A valid email address.
-- **Password:** Choose a strong password.
+#### Example
 
-After registration, you will receive a confirmation email to verify your account.
+```typescript  
+// When project is initialized using CLI, environment variables are automatically used
+const auth = new Auth(
+    process.env.MPESA_CONSUMER_KEY!,
+    process.env.MPESA_CONSUMER_SECRET!,
+    process.env.MPESA_SANDBOX === 'true'
+);
 
-## Password Recovery
+// Direct initialization with credentials
+const auth = new Auth(
+    'your-consumer-key',
+    'your-consumer-secret',
+    true // true for sandbox, false for production
+);
+```
 
-If you have forgotten your password, you can recover it by clicking on the "Forgot Password?" link on the login page. Follow the instructions in the email you receive to reset your password.
+### Methods
 
-## Additional Resources
+#### generateToken()
 
-For more information, please refer to our [documentation](https://example.com/docs) or contact support.
+```typescript
+public async generateToken(): Promise<{
+  token: string;
+  tokenType: string;
+  expiresIn: number;
+}>
+```
 
-We hope you have a great experience using our application!
+Generates an authentication token for M-Pesa API access. This method handles:
+
+1. Combining consumer credentials
+2. Base64 encoding
+3. Making HTTP request to token endpoint
+4. Rate limiting token requests
+5. Error handling
+
+##### Returns
+
+An object containing:
+- `token`: The access token string for API authentication
+- `tokenType`: The type of token (usually "Bearer")
+- `expiresIn`: Token validity period in seconds
+
+##### Example
+
+```typescript
+try {
+  const auth = new Auth();
+  const { token, tokenType, expiresIn } = await auth.generateToken();
+  console.log('Access Token:', token);
+  console.log('Token Type:', tokenType);
+  console.log('Expires In:', expiresIn, 'seconds');
+} catch (error) {
+  console.error('Authentication failed:', error.message);
+}
+```
+
+## Error Handling
+
+The authentication module includes robust error handling for various scenarios:
+
+### AuthenticationError
+Thrown when there are issues with the authentication process, such as:
+- Invalid credentials
+- API authentication failures
+- Unknown authentication errors
+
+### MpesaError
+A general error class for M-Pesa related errors, including:
+- Network connection issues
+- Invalid API responses
+- Request setup failures
+
+### Example Error Handling
+
+```typescript
+try {
+  const auth = new Auth();
+  const tokenData = await auth.generateToken();
+  // Use token data...
+} catch (error) {
+  if (error instanceof AuthenticationError) {
+    console.error('Authentication failed:', error.message);
+  } else if (error instanceof MpesaError) {
+    console.error('M-Pesa API error:', error.message);
+  } else {
+    console.error('Unexpected error:', error.message);
+  }
+}
+```
+
+## Rate Limiting
+
+The authentication module includes built-in rate limiting through the `RateLimiter` class. This helps prevent:
+- Too many token requests
+- API throttling
+- Potential account blocks
+
+The rate limiter automatically manages token request frequency, ensuring your application stays within M-Pesa's API limits.
+
+## Environment Variables
+
+The Auth module uses the following environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MPESA_CONSUMER_KEY` | Your M-Pesa API consumer key | - |
+| `MPESA_CONSUMER_SECRET` | Your M-Pesa API consumer secret | - |
+| `MPESA_SANDBOX` | Whether to use sandbox environment | "true" |
+
+## Best Practices
+
+1. **Environment Variables**: Always use environment variables for credentials in production.
+2. **Error Handling**: Implement proper error handling for all authentication calls.
+3. **Token Management**: Cache and reuse tokens until they expire.
+4. **Sandbox Testing**: Use the sandbox environment for development and testing.
+
+## API Endpoints
+
+The module automatically uses the appropriate endpoint based on the environment:
+
+- Sandbox: `https://apisandbox.safaricom.et/v1/token/generate`
+- Production: `https://api.safaricom.et/v1/token/generate`

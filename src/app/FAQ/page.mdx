@@ -1,0 +1,157 @@
+# Frequently Asked Questions
+
+Here are some common questions and answers about using the mpesajs library.
+
+## General Questions
+
+### What is mpesajs?
+mpesajs is a Node.js library that provides a simple and intuitive way to integrate with the Ethiopian M-Pesa API. It handles authentication, rate limiting, and provides type-safe interfaces for various M-Pesa operations.
+
+### Which Node.js versions are supported?
+mpesajs supports Node.js versions 14 and above. We recommend using the latest LTS version for optimal performance and security.
+
+### Is mpesajs compatible with TypeScript?
+Yes! mpesajs is written in TypeScript and includes built-in type definitions. You'll get full IntelliSense support in your IDE.
+
+## Setup & Configuration
+
+### How do I install mpesajs?
+You can install mpesajs using npm or yarn:
+
+```bash
+npm install mpesajs
+# or
+yarn add mpesajs
+```
+
+### How do I set up environment variables?
+Create a `.env` file in your project root and add your M-Pesa credentials:
+
+```env
+MPESA_CONSUMER_KEY=your_consumer_key
+MPESA_CONSUMER_SECRET=your_consumer_secret
+MPESA_SANDBOX=true
+```
+
+### Can I use mpesajs in the browser?
+No, mpesajs is designed for server-side use only. Your M-Pesa credentials should never be exposed in client-side code.
+
+## Authentication
+
+### How long do access tokens last?
+Access tokens are valid for 1 hour (3600 seconds). The library automatically handles token refresh.
+
+### What happens if authentication fails?
+The library will throw an `AuthenticationError` with details about what went wrong. Always implement proper error handling.
+
+### Should I store the access token?
+No need! The library handles token management internally with built-in caching and refresh mechanisms.
+
+## API Operations
+
+### What types of payments are supported?
+mpesajs currently supports:
+- Business-to-Customer (B2C) payments
+- URL registration for callbacks
+- More payment types coming soon!
+
+### How do I handle callbacks from M-Pesa?
+1. Register your callback URLs using the `RegisterUrl` class
+2. Set up endpoints at your callback URLs
+3. Validate the incoming requests
+4. Send appropriate responses
+
+### What's the difference between sandbox and production modes?
+- Sandbox: Test environment with fake money
+- Production: Real environment with actual transactions
+- Switch between them using the `MPESA_SANDBOX` environment variable
+
+## Error Handling
+
+### What types of errors should I handle?
+Main error types include:
+- `ValidationError`: Invalid input parameters
+- `AuthenticationError`: Authentication issues
+- `PayoutError`: B2C payment failures
+- `RegisterUrlError`: URL registration problems
+- `NetworkError`: Connection issues
+
+### How should I implement error handling?
+Always use try-catch blocks and handle specific error types:
+
+```typescript
+try {
+    const result = await payout.send(amount, remarks);
+} catch (error) {
+    if (error instanceof ValidationError) {
+        // Handle validation errors
+    } else if (error instanceof PayoutError) {
+        // Handle payout errors
+    } else {
+        // Handle other errors
+    }
+}
+```
+
+## Rate Limiting
+
+### Does mpesajs handle rate limiting?
+Yes! The library includes built-in rate limiting to prevent API throttling.
+
+### Can I configure rate limiting?
+The rate limiting is pre-configured based on M-Pesa's API limits. This helps prevent account blocks and ensures reliable operation.
+
+## Security
+
+### How should I secure my credentials?
+1. Always use environment variables
+2. Never commit credentials to version control
+3. Use different credentials for sandbox and production
+4. Implement proper access controls
+
+### Are HTTPS URLs required?
+Yes, all callback URLs must use HTTPS. The library enforces this requirement to ensure secure communications.
+
+## Troubleshooting
+
+### Common Issues
+
+#### "Invalid phone number format"
+Ensure phone numbers:
+- Start with "251"
+- Are 12 digits long
+- Don't include spaces or special characters
+
+#### "URL must use HTTPS"
+All callback URLs must:
+- Start with "https://"
+- Be publicly accessible
+- Have valid SSL certificates
+
+#### "Rate limit exceeded"
+The library implements rate limiting to protect your account. If you're hitting limits:
+- Implement proper error handling
+- Add retries with exponential backoff
+- Contact M-Pesa support if you need higher limits
+
+### Getting Help
+
+If you need help:
+1. Check this documentation
+2. Look for similar issues on GitHub
+3. Open a new issue if needed
+4. Join our Telegram community
+
+## Updates & Migration
+
+### How do I update mpesajs?
+Use your package manager to update to the latest version:
+
+```bash
+npm update mpesajs
+# or
+yarn upgrade mpesajs
+```
+
+### Are there breaking changes between versions?
+Major version changes (e.g., 1.x.x to 2.x.x) may include breaking changes. Always read the changelog before upgrading.
