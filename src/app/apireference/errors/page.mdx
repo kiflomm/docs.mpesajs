@@ -1,0 +1,211 @@
+# Error Handling
+
+The MPesaJS SDK provides a comprehensive error handling system with specialized error types for different scenarios. All error types extend from the base `MpesaError` class.
+
+## Error Types
+
+### MpesaError
+The base error class for all SDK-specific errors.
+
+```typescript
+class MpesaError extends Error {
+    name: 'MpesaError';
+    message: string;
+}
+```
+
+### AuthenticationError
+Thrown when there are issues with API authentication.
+
+```typescript
+class AuthenticationError extends MpesaError {
+    name: 'AuthenticationError';
+    errorCode?: string;
+}
+```
+
+Common scenarios:
+- Invalid consumer key or secret
+- Expired access token
+- Invalid API credentials
+
+### NetworkError
+Thrown for network-related issues.
+
+```typescript
+class NetworkError extends MpesaError {
+    name: 'NetworkError';
+}
+```
+
+Common scenarios:
+- No internet connection
+- API timeout
+- DNS resolution failure
+
+### ValidationError
+Thrown when input validation fails.
+
+```typescript
+class ValidationError extends MpesaError {
+    name: 'ValidationError';
+    field?: string;
+}
+```
+
+Common scenarios:
+- Invalid phone number format
+- Invalid amount
+- Missing required fields
+- Invalid URL format
+
+### StkPushError
+Specific to STK Push transaction failures.
+
+```typescript
+class StkPushError extends MpesaError {
+    name: 'StkPushError';
+    responseCode?: string;
+    merchantRequestId?: string;
+    checkoutRequestId?: string;
+}
+```
+
+Common scenarios:
+- User cancelled the transaction
+- Insufficient funds
+- Wrong PIN entered
+- Transaction timeout
+
+### PayoutError
+Specific to B2C payment failures.
+
+```typescript
+class PayoutError extends MpesaError {
+    name: 'PayoutError';
+    errorCode?: string;
+    requestId?: string;
+    responseCode?: string;
+    conversationId?: string;
+}
+```
+
+Common scenarios:
+- Invalid recipient number
+- System downtime
+- Daily limit exceeded
+- Invalid initiator credentials
+
+### RegisterUrlError
+Specific to URL registration failures.
+
+```typescript
+class RegisterUrlError extends MpesaError {
+    name: 'RegisterUrlError';
+    responseCode?: string;
+    shortCode?: string;
+}
+```
+
+Common scenarios:
+- Invalid URL format
+- Invalid shortcode
+- Unauthorized registration attempt
+
+## Best Practices
+
+### 1. Use Type Checking
+Always check for specific error types to handle different scenarios appropriately:
+
+```typescript
+try {
+    await stkPush.sendStkPush(/* ... */);
+} catch (error) {
+    if (error instanceof ValidationError) {
+        console.error(`Validation failed for field: ${error.field}`);
+    } else if (error instanceof StkPushError) {
+        console.error(`Transaction failed: ${error.message}`);
+        console.error(`Request ID: ${error.merchantRequestId}`);
+    } else if (error instanceof NetworkError) {
+        console.error('Network issue - please try again');
+    } else {
+        console.error('Unexpected error:', error);
+    }
+}
+```
+
+### 2. Log Error Details
+Include relevant error properties in your logs:
+
+```typescript
+try {
+    await payout.send(/* ... */);
+} catch (error) {
+    if (error instanceof PayoutError) {
+        logger.error({
+            message: error.message,
+            errorCode: error.errorCode,
+            requestId: error.requestId,
+            conversationId: error.conversationId
+        });
+    }
+}
+```
+
+### 3. Handle Network Issues
+Always handle network errors gracefully:
+
+```typescript
+try {
+    await auth.generateToken();
+} catch (error) {
+    if (error instanceof NetworkError) {
+        // Implement retry logic
+        await retryWithBackoff(async () => {
+            return auth.generateToken();
+        });
+    }
+}
+```
+
+### 4. Validate Input Early
+Use validation checks to catch errors early:
+
+```typescript
+if (!phoneNumber.match(/^254[0-9]{9}$/)) {
+    throw new ValidationError('Invalid phone number format', 'phoneNumber');
+}
+```
+
+## Error Response Examples
+
+### STK Push Error
+```json
+{
+    "name": "StkPushError",
+    "message": "The service request failed",
+    "responseCode": "1032",
+    "merchantRequestId": "29115-34620561-1",
+    "checkoutRequestId": "ws_CO_191220191020363925"
+}
+```
+
+### Payout Error
+```json
+{
+    "name": "PayoutError",
+    "message": "The initiator information is invalid",
+    "errorCode": "500.001.1001",
+    "requestId": "11115-7654321-1",
+    "conversationId": "AG_20191219_00004e48cf7e9fb0f2d3"
+}
+```
+
+### Authentication Error
+```json
+{
+    "name": "AuthenticationError",
+    "message": "Invalid consumer key",
+    "errorCode": "401.001.1"
+}
+``` 

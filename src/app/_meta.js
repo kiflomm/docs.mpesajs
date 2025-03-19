@@ -4,5 +4,7 @@ export default {
     payout: "Payout initiation",
     registerurl: "URL Registration",
     stkpush: "STK Push",
+    apireference: "API Reference",
     FAQ: "Frequently Asked Questions",
+
 }

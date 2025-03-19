@@ -1,0 +1,457 @@
+# Payout
+
+The `Payout` class enables businesses to send money to customer phone numbers through M-Pesa's Business-to-Customer (B2C) API.
+
+## Class: Payout
+
+```typescript
+class Payout {
+    constructor(
+        auth: Auth,
+        initiatorName?: string,
+        securityCredential?: string,
+        sandbox?: boolean
+    );
+
+    public async send(
+        amount: number,
+        remarks: string,
+        occasion?: string,
+        commandId?: 'BusinessPayment' | 'SalaryPayment' | 'PromotionPayment',
+        shortCode?: string,
+        phoneNumber?: string,
+        queueTimeoutUrl?: string,
+        resultUrl?: string
+    ): Promise<PayoutResponse>;
+}
+
+interface PayoutResponse {
+    ConversationID: string;
+    OriginatorConversationID: string;
+    ResponseCode: string;
+    ResponseDescription: string;
+}
+```
+
+## Constructor
+
+Creates a new instance of the Payout class for handling B2C payments.
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `auth` | Auth | Yes | - | Instance of Auth class for token generation |
+| `initiatorName` | string | No | `MPESA_INITIATOR_NAME` env var | Name of the initiator making the request |
+| `securityCredential` | string | No | `MPESA_SECURITY_CREDENTIAL` env var | Encrypted security credential |
+| `sandbox` | boolean | No | `MPESA_SANDBOX` env var | Whether to use sandbox environment |
+
+### Examples
+
+```typescript
+// Using environment variables (recommended)
+const auth = new Auth();
+const payout = new Payout(auth);
+
+// Explicit initialization
+const payout = new Payout(
+    new Auth('consumer-key', 'consumer-secret'),
+    'John Doe',
+    'encrypted-credential',
+    true // sandbox mode
+);
+
+// Production setup
+const payout = new Payout(
+    new Auth(),
+    process.env.MPESA_INITIATOR_NAME,
+    process.env.MPESA_SECURITY_CREDENTIAL,
+    false // production mode
+);
+```
+
+## Methods
+
+### send()
+
+Sends money to a customer's M-Pesa account.
+
+```typescript
+public async send(
+    amount: number,
+    remarks: string,
+    occasion?: string,
+    commandId?: 'BusinessPayment' | 'SalaryPayment' | 'PromotionPayment',
+    shortCode?: string,
+    phoneNumber?: string,
+    queueTimeoutUrl?: string,
+    resultUrl?: string
+): Promise<PayoutResponse>;
+```
+
+#### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `amount` | number | Yes | - | Amount to send (must be positive) |
+| `remarks` | string | Yes | - | Comments about the transaction |
+| `occasion` | string | No | 'Payout' | Additional transaction context |
+| `commandId` | string | No | `MPESA_PAYOUT_COMMAND_ID` env var | Type of B2C payment |
+| `shortCode` | string | No | `MPESA_BUSINESS_SHORTCODE` env var | Organization's shortcode |
+| `phoneNumber` | string | No | `MPESA_PHONE_NUMBER` env var | Recipient's phone number |
+| `queueTimeoutUrl` | string | No | `MPESA_QUEUE_TIMEOUT_URL` env var | URL for timeout notifications |
+| `resultUrl` | string | No | `MPESA_RESULT_URL` env var | URL for transaction results |
+
+#### Returns
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ConversationID` | string | Unique identifier for tracking the transaction |
+| `OriginatorConversationID` | string | The unique request identifier from your system |
+| `ResponseCode` | string | Response code from M-Pesa |
+| `ResponseDescription` | string | Description of the response status |
+
+#### Examples
+
+```typescript
+// Basic payout
+try {
+    const result = await payout.send(
+        1000, // Amount in KES
+        'Salary payment for March',
+        'March Salary',
+        'SalaryPayment',
+        '600000',
+        '254712345678'
+    );
+    console.log('Payout initiated:', result.ConversationID);
+} catch (error) {
+    console.error('Payout failed:', error);
+}
+
+// With input validation
+const sendSalary = async (phoneNumber: string, amount: number) => {
+    // Validate phone number format
+    if (!phoneNumber.match(/^254[0-9]{9}$/)) {
+        throw new ValidationError('Invalid phone number format', 'phoneNumber');
+    }
+
+    // Validate amount
+    if (amount <= 0 || amount > 150000) {
+        throw new ValidationError('Amount must be between 1 and 150,000', 'amount');
+    }
+
+    return payout.send(
+        amount,
+        'Salary Payment',
+        'Monthly Salary',
+        'SalaryPayment',
+        process.env.MPESA_BUSINESS_SHORTCODE,
+        phoneNumber
+    );
+};
+```
+
+## Error Handling
+
+The `Payout` class can throw several types of errors:
+
+### ValidationError
+Thrown when input parameters are invalid.
+
+```typescript
+try {
+    await payout.send(/* ... */);
+} catch (error) {
+    if (error instanceof ValidationError) {
+        console.error(`Validation failed for ${error.field}:`, error.message);
+        // Handle specific validation errors
+        switch (error.field) {
+            case 'phoneNumber':
+                // Prompt user to correct phone number
+                break;
+            case 'amount':
+                // Show valid amount range
+                break;
+        }
+    }
+}
+```
+
+### PayoutError
+Thrown for M-Pesa API-specific errors.
+
+```typescript
+try {
+    await payout.send(/* ... */);
+} catch (error) {
+    if (error instanceof PayoutError) {
+        console.error(
+            `Transaction failed: ${error.message}`,
+            `Request ID: ${error.requestId}`,
+            `Response Code: ${error.responseCode}`,
+            `Conversation ID: ${error.conversationId}`
+        );
+        // Handle specific error codes
+        switch (error.errorCode) {
+            case '500.001.1001':
+                console.error('Invalid initiator credentials');
+                break;
+            case '500.001.1002':
+                console.error('Insufficient funds');
+                break;
+        }
+    }
+}
+```
+
+### NetworkError
+Thrown when network connectivity issues occur.
+
+```typescript
+try {
+    await payout.send(/* ... */);
+} catch (error) {
+    if (error instanceof NetworkError) {
+        console.error('Network issue - retrying payout');
+        // Implement retry logic
+    }
+}
+```
+
+## Best Practices
+
+### 1. Input Validation
+Validate inputs before making API calls:
+
+```typescript
+class PayoutValidator {
+    static validatePhoneNumber(phoneNumber: string): boolean {
+        return /^254[0-9]{9}$/.test(phoneNumber);
+    }
+
+    static validateAmount(amount: number): boolean {
+        return amount > 0 && amount <= 150000;
+    }
+
+    static validateRemarks(remarks: string): boolean {
+        return remarks.length > 0 && remarks.length <= 100;
+    }
+
+    static validateCommandId(commandId: string): boolean {
+        return ['BusinessPayment', 'SalaryPayment', 'PromotionPayment'].includes(commandId);
+    }
+}
+
+// Usage
+const initiatePayout = async (data: PayoutData) => {
+    if (!PayoutValidator.validatePhoneNumber(data.phoneNumber)) {
+        throw new ValidationError('Invalid phone number', 'phoneNumber');
+    }
+    // ... other validations
+};
+```
+
+### 2. Result URL Handling
+Implement robust result handling:
+
+```typescript
+// Express.js result handler
+app.post('/mpesa/result', express.json(), (req, res) => {
+    const {
+        Result: {
+            ConversationID,
+            OriginatorConversationID,
+            ResultCode,
+            ResultDesc,
+            TransactionID
+        }
+    } = req.body;
+
+    // Process result
+    if (ResultCode === '0') {
+        // Payout successful
+        await processSuccessfulPayout({
+            conversationId: ConversationID,
+            transactionId: TransactionID
+        });
+    } else {
+        // Payout failed
+        await processFailedPayout({
+            conversationId: ConversationID,
+            resultCode: ResultCode,
+            resultDesc: ResultDesc
+        });
+    }
+
+    res.json({ success: true });
+});
+```
+
+### 3. Transaction Tracking
+Maintain transaction records:
+
+```typescript
+class PayoutTracker {
+    private payouts: Map<string, {
+        requestId: string;
+        amount: number;
+        recipient: string;
+        timestamp: number;
+        status: 'pending' | 'completed' | 'failed';
+        transactionId?: string;
+    }> = new Map();
+
+    async trackPayout(conversationId: string, data: PayoutData) {
+        this.payouts.set(conversationId, {
+            requestId: data.requestId,
+            amount: data.amount,
+            recipient: data.phoneNumber,
+            timestamp: Date.now(),
+            status: 'pending'
+        });
+    }
+
+    async updateStatus(
+        conversationId: string,
+        status: 'completed' | 'failed',
+        transactionId?: string
+    ) {
+        const payout = this.payouts.get(conversationId);
+        if (payout) {
+            payout.status = status;
+            if (transactionId) {
+                payout.transactionId = transactionId;
+            }
+            this.payouts.set(conversationId, payout);
+        }
+    }
+}
+```
+
+### 4. Error Recovery
+Implement retry logic for recoverable errors:
+
+```typescript
+const sendPayoutWithRetry = async (
+    params: PayoutParams,
+    maxRetries = 3
+): Promise<PayoutResponse> => {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await payout.send(/* ... */);
+        } catch (error) {
+            lastError = error;
+            
+            if (error instanceof NetworkError) {
+                // Wait before retrying
+                await new Promise(resolve => 
+                    setTimeout(resolve, attempt * 1000)
+                );
+                continue;
+            }
+            
+            // Don't retry other types of errors
+            throw error;
+        }
+    }
+    
+    throw lastError;
+};
+```
+
+## Rate Limiting
+
+The Payout class includes built-in rate limiting to prevent API abuse. Requests are automatically rate-limited based on M-Pesa's guidelines.
+
+```typescript
+// Rate limiting is handled automatically
+const payouts = await Promise.all([
+    payout.send(/* ... */), // First request proceeds
+    payout.send(/* ... */), // Second request is rate-limited
+    payout.send(/* ... */)  // Third request is rate-limited
+]);
+```
+
+## Integration Examples
+
+### Express.js Integration
+Example of integrating Payout in an Express.js application:
+
+```typescript
+const express = require('express');
+const { Auth, Payout } = require('mpesajs');
+
+const app = express();
+const auth = new Auth();
+const payout = new Payout(auth);
+
+app.post('/payout', async (req, res) => {
+    try {
+        const { phoneNumber, amount, remarks } = req.body;
+        
+        const result = await payout.send(
+            amount,
+            remarks,
+            'Payout',
+            'BusinessPayment',
+            process.env.MPESA_BUSINESS_SHORTCODE,
+            phoneNumber
+        );
+        
+        res.json({
+            success: true,
+            conversationId: result.ConversationID
+        });
+    } catch (error) {
+        res.status(400).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+```
+
+### Batch Processing
+Example of processing multiple payouts:
+
+```typescript
+class PayoutProcessor {
+    constructor(private payout: Payout) {}
+
+    async processBatch(payouts: PayoutData[]) {
+        const results = {
+            successful: [] as PayoutResponse[],
+            failed: [] as Error[]
+        };
+
+        for (const data of payouts) {
+            try {
+                const result = await this.payout.send(
+                    data.amount,
+                    data.remarks,
+                    data.occasion,
+                    data.commandId
+                );
+                results.successful.push(result);
+            } catch (error) {
+                results.failed.push({
+                    data,
+                    error
+                });
+            }
+        }
+
+        return results;
+    }
+}
+
+// Usage
+const processor = new PayoutProcessor(payout);
+const results = await processor.processBatch([
+    { amount: 1000, remarks: 'Salary - John', commandId: 'SalaryPayment' },
+    { amount: 2000, remarks: 'Salary - Jane', commandId: 'SalaryPayment' }
+]);
+``` 

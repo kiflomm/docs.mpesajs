@@ -1,0 +1,277 @@
+# Authentication
+
+The `Auth` class is the foundation of the MPesaJS SDK, handling OAuth token generation and management for all M-Pesa API interactions.
+
+## Class: Auth
+
+```typescript
+class Auth {
+    constructor(
+        consumerKey?: string,
+        consumerSecret?: string,
+        sandbox?: boolean
+    );
+
+    public async generateToken(): Promise<{
+        token: string;
+        tokenType: string;
+        expiresIn: number;
+    }>;
+}
+```
+
+## Constructor
+
+Creates a new instance of the Auth class for handling M-Pesa API authentication.
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `consumerKey` | string | No | `MPESA_CONSUMER_KEY` env var | Your M-Pesa consumer key |
+| `consumerSecret` | string | No | `MPESA_CONSUMER_SECRET` env var | Your M-Pesa consumer secret |
+| `sandbox` | boolean | No | `MPESA_SANDBOX` env var | Whether to use sandbox environment |
+
+### Examples
+
+```typescript
+// Using environment variables (recommended)
+const auth = new Auth();
+
+// Explicit initialization
+const auth = new Auth(
+    'your-consumer-key',
+    'your-consumer-secret',
+    true // sandbox mode
+);
+
+// Mixed usage
+const auth = new Auth(
+    process.env.MPESA_CONSUMER_KEY,
+    process.env.MPESA_CONSUMER_SECRET,
+    process.env.NODE_ENV !== 'production'
+);
+```
+
+## Methods
+
+### generateToken()
+
+Generates an OAuth access token required for authenticating M-Pesa API requests.
+
+```typescript
+public async generateToken(): Promise<{
+    token: string;
+    tokenType: string;
+    expiresIn: number;
+}>;
+```
+
+#### Returns
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `token` | string | The OAuth access token |
+| `tokenType` | string | Type of token (usually "Bearer") |
+| `expiresIn` | number | Token validity period in seconds |
+
+#### Examples
+
+```typescript
+// Basic token generation
+try {
+    const { token, expiresIn } = await auth.generateToken();
+    console.log(`Token generated! Expires in ${expiresIn} seconds`);
+} catch (error) {
+    console.error('Token generation failed:', error);
+}
+
+// With automatic retry on network issues
+try {
+    const { token } = await auth.generateToken();
+} catch (error) {
+    if (error instanceof NetworkError) {
+        // Implement exponential backoff retry
+        const result = await retryWithBackoff(
+            () => auth.generateToken(),
+            {
+                maxAttempts: 3,
+                initialDelay: 1000
+            }
+        );
+    }
+}
+
+// Store token for reuse
+let tokenData = null;
+const getToken = async () => {
+    if (!tokenData || isTokenExpired(tokenData)) {
+        tokenData = await auth.generateToken();
+    }
+    return tokenData.token;
+};
+```
+
+## Error Handling
+
+The `Auth` class can throw several types of errors:
+
+### AuthenticationError
+Thrown when authentication fails due to invalid credentials or API issues.
+
+```typescript
+try {
+    await auth.generateToken();
+} catch (error) {
+    if (error instanceof AuthenticationError) {
+        console.error(
+            `Authentication failed: ${error.message}`,
+            `Error code: ${error.errorCode}`
+        );
+        // Handle invalid credentials
+        if (error.errorCode === '401.001.1') {
+            console.error('Please check your consumer key and secret');
+        }
+    }
+}
+```
+
+### NetworkError
+Thrown when network connectivity issues occur.
+
+```typescript
+try {
+    await auth.generateToken();
+} catch (error) {
+    if (error instanceof NetworkError) {
+        console.error('Network issue - implementing retry logic');
+        // Implement retry with exponential backoff
+    }
+}
+```
+
+## Best Practices
+
+### 1. Token Reuse
+Cache and reuse tokens until they expire:
+
+```typescript
+class TokenManager {
+    private tokenData: {
+        token: string;
+        expiresAt: number;
+    } | null = null;
+
+    constructor(private auth: Auth) {}
+
+    async getToken(): Promise<string> {
+        if (!this.tokenData || Date.now() >= this.tokenData.expiresAt) {
+            const { token, expiresIn } = await this.auth.generateToken();
+            this.tokenData = {
+                token,
+                expiresAt: Date.now() + (expiresIn * 1000) - 60000 // Buffer of 1 minute
+            };
+        }
+        return this.tokenData.token;
+    }
+}
+```
+
+### 2. Environment-Based Configuration
+Use different configurations for development and production:
+
+```typescript
+const auth = new Auth(
+    process.env.MPESA_CONSUMER_KEY,
+    process.env.MPESA_CONSUMER_SECRET,
+    process.env.NODE_ENV === 'development'
+);
+```
+
+### 3. Error Recovery
+Implement robust error handling and recovery:
+
+```typescript
+const getAuthToken = async (retries = 3): Promise<string> => {
+    try {
+        const { token } = await auth.generateToken();
+        return token;
+    } catch (error) {
+        if (error instanceof NetworkError && retries > 0) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return getAuthToken(retries - 1);
+        }
+        throw error;
+    }
+};
+```
+
+### 4. Secure Credential Management
+Use environment variables or secure vaults for credentials:
+
+```typescript
+// Load credentials from environment variables
+const auth = new Auth();
+
+// Or use a secure configuration manager
+const auth = new Auth(
+    await secretManager.getSecret('mpesa-consumer-key'),
+    await secretManager.getSecret('mpesa-consumer-secret')
+);
+```
+
+## Rate Limiting
+
+The Auth class includes built-in rate limiting to prevent API abuse. Token generation requests are automatically rate-limited based on M-Pesa's guidelines.
+
+```typescript
+// Rate limiting is handled automatically
+const tokens = await Promise.all([
+    auth.generateToken(), // First request proceeds
+    auth.generateToken(), // Second request is rate-limited
+    auth.generateToken()  // Third request is rate-limited
+]);
+```
+
+## Integration Examples
+
+### Express.js Middleware
+Example of using Auth in an Express.js middleware:
+
+```typescript
+const mpesaAuthMiddleware = (auth: Auth) => async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+) => {
+    try {
+        const { token } = await auth.generateToken();
+        req.mpesaToken = token;
+        next();
+    } catch (error) {
+        next(error);
+    }
+};
+
+app.use(mpesaAuthMiddleware(new Auth()));
+```
+
+### Class-based Integration
+Example of integrating Auth in a service class:
+
+```typescript
+class MpesaService {
+    private auth: Auth;
+    private tokenManager: TokenManager;
+
+    constructor() {
+        this.auth = new Auth();
+        this.tokenManager = new TokenManager(this.auth);
+    }
+
+    async makeApiRequest() {
+        const token = await this.tokenManager.getToken();
+        // Use token for API requests
+    }
+}
+``` 

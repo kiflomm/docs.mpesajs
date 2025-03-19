@@ -1,0 +1,522 @@
+# URL Registration
+
+The `RegisterUrl` class enables businesses to register their callback URLs for receiving M-Pesa transaction notifications and validation requests.
+
+## Class: RegisterUrl
+
+```typescript
+class RegisterUrl {
+    constructor(
+        apiKey?: string,
+        sandbox?: boolean
+    );
+
+    public async register(
+        shortCode?: string,
+        responseType?: 'Completed' | 'Cancelled',
+        commandId?: 'RegisterURL',
+        confirmationUrl?: string,
+        validationUrl?: string
+    ): Promise<RegisterUrlResponse>;
+}
+
+interface RegisterUrlResponse {
+    responseCode: string;
+    responseMessage: string;
+    customerMessage: string;
+    timestamp: string;
+}
+```
+
+## Constructor
+
+Creates a new instance of the RegisterUrl class for managing callback URLs.
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `apiKey` | string | No | `MPESA_CONSUMER_KEY` env var | M-Pesa API key for authentication |
+| `sandbox` | boolean | No | `MPESA_SANDBOX` env var | Whether to use sandbox environment |
+
+### Examples
+
+```typescript
+// Using environment variables (recommended)
+const registerUrl = new RegisterUrl();
+
+// Explicit initialization
+const registerUrl = new RegisterUrl(
+    'your-api-key',
+    true // sandbox mode
+);
+
+// Production setup
+const registerUrl = new RegisterUrl(
+    process.env.MPESA_CONSUMER_KEY,
+    process.env.NODE_ENV === 'production' ? false : true
+);
+```
+
+## Methods
+
+### register()
+
+Registers validation and confirmation URLs with M-Pesa.
+
+```typescript
+public async register(
+    shortCode?: string,
+    responseType?: 'Completed' | 'Cancelled',
+    commandId?: 'RegisterURL',
+    confirmationUrl?: string,
+    validationUrl?: string
+): Promise<RegisterUrlResponse>;
+```
+
+#### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `shortCode` | string | No | `MPESA_BUSINESS_SHORTCODE` env var | Business short code or PayBill number |
+| `responseType` | string | No | `MPESA_REGISTER_URL_RESPONSE_TYPE` env var | Type of response expected |
+| `commandId` | string | No | `MPESA_REGISTER_URL_COMMAND_ID` env var | Command identifier |
+| `confirmationUrl` | string | No | `MPESA_CONFIRMATION_URL` env var | URL for successful transaction confirmations |
+| `validationUrl` | string | No | `MPESA_VALIDATION_URL` env var | URL for transaction validation |
+
+#### Returns
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `responseCode` | string | Status code from M-Pesa API |
+| `responseMessage` | string | Detailed message about the registration status |
+| `customerMessage` | string | User-friendly message about the registration |
+| `timestamp` | string | When the registration was processed |
+
+#### Examples
+
+```typescript
+// Basic URL registration
+try {
+    const result = await registerUrl.register(
+        '174379',
+        'Completed',
+        'RegisterURL',
+        'https://example.com/confirmation',
+        'https://example.com/validation'
+    );
+    console.log('URLs registered successfully:', result.responseMessage);
+} catch (error) {
+    console.error('URL registration failed:', error);
+}
+
+// With URL validation
+const registerCallbackUrls = async (confirmationUrl: string, validationUrl: string) => {
+    // Validate URL format
+    if (!isValidHttpsUrl(confirmationUrl)) {
+        throw new ValidationError('Invalid confirmation URL format', 'confirmationUrl');
+    }
+
+    if (!isValidHttpsUrl(validationUrl)) {
+        throw new ValidationError('Invalid validation URL format', 'validationUrl');
+    }
+
+    return registerUrl.register(
+        process.env.MPESA_BUSINESS_SHORTCODE,
+        'Completed',
+        'RegisterURL',
+        confirmationUrl,
+        validationUrl
+    );
+};
+
+// Helper function for URL validation
+function isValidHttpsUrl(urlString: string): boolean {
+    try {
+        const url = new URL(urlString);
+        return url.protocol === 'https:';
+    } catch {
+        return false;
+    }
+}
+```
+
+## Error Handling
+
+The `RegisterUrl` class can throw several types of errors:
+
+### ValidationError
+Thrown when input parameters are invalid.
+
+```typescript
+try {
+    await registerUrl.register(/* ... */);
+} catch (error) {
+    if (error instanceof ValidationError) {
+        console.error(`Validation failed for ${error.field}:`, error.message);
+        // Handle specific validation errors
+        switch (error.field) {
+            case 'confirmationUrl':
+                console.error('Confirmation URL must use HTTPS');
+                break;
+            case 'validationUrl':
+                console.error('Validation URL must use HTTPS');
+                break;
+        }
+    }
+}
+```
+
+### RegisterUrlError
+Thrown for M-Pesa API-specific errors.
+
+```typescript
+try {
+    await registerUrl.register(/* ... */);
+} catch (error) {
+    if (error instanceof RegisterUrlError) {
+        console.error(
+            `Registration failed: ${error.message}`,
+            `Response Code: ${error.responseCode}`,
+            `Short Code: ${error.shortCode}`
+        );
+        // Handle specific response codes
+        switch (error.responseCode) {
+            case 'E001':
+                console.error('Invalid short code');
+                break;
+            case 'E002':
+                console.error('URLs already registered');
+                break;
+        }
+    }
+}
+```
+
+### NetworkError
+Thrown when network connectivity issues occur.
+
+```typescript
+try {
+    await registerUrl.register(/* ... */);
+} catch (error) {
+    if (error instanceof NetworkError) {
+        console.error('Network issue - retrying registration');
+        // Implement retry logic
+    }
+}
+```
+
+## Best Practices
+
+### 1. URL Validation
+Validate URLs before registration:
+
+```typescript
+class UrlValidator {
+    static isValidHttpsUrl(urlString: string): boolean {
+        try {
+            const url = new URL(urlString);
+            return url.protocol === 'https:';
+        } catch {
+            return false;
+        }
+    }
+
+    static isValidDomain(urlString: string): boolean {
+        try {
+            const url = new URL(urlString);
+            return !url.hostname.includes('localhost') && 
+                   !url.hostname.includes('127.0.0.1');
+        } catch {
+            return false;
+        }
+    }
+
+    static validateCallbackUrl(url: string, type: 'confirmation' | 'validation'): void {
+        if (!this.isValidHttpsUrl(url)) {
+            throw new ValidationError(
+                `${type} URL must use HTTPS protocol`,
+                `${type}Url`
+            );
+        }
+
+        if (!this.isValidDomain(url)) {
+            throw new ValidationError(
+                `${type} URL must be a public domain`,
+                `${type}Url`
+            );
+        }
+    }
+}
+
+// Usage
+const validateAndRegister = async (confirmationUrl: string, validationUrl: string) => {
+    UrlValidator.validateCallbackUrl(confirmationUrl, 'confirmation');
+    UrlValidator.validateCallbackUrl(validationUrl, 'validation');
+    
+    return registerUrl.register(
+        process.env.MPESA_BUSINESS_SHORTCODE,
+        'Completed',
+        'RegisterURL',
+        confirmationUrl,
+        validationUrl
+    );
+};
+```
+
+### 2. Callback Implementation
+Implement secure and robust callback handlers:
+
+```typescript
+// Express.js callback handlers
+const express = require('express');
+const crypto = require('crypto');
+
+const app = express();
+
+// Validation URL handler
+app.post('/mpesa/validate', express.json(), (req, res) => {
+    // Verify request authenticity
+    const signature = req.headers['x-mpesa-signature'];
+    if (!isValidSignature(signature, req.body)) {
+        return res.status(401).json({
+            ResultCode: 'C2B00012',
+            ResultDesc: 'Invalid signature'
+        });
+    }
+
+    // Validate transaction
+    const { TransactionType, TransID, TransAmount } = req.body;
+    
+    try {
+        // Implement your validation logic
+        const isValid = validateTransaction(TransactionType, TransAmount);
+        
+        res.json({
+            ResultCode: isValid ? '0' : '1',
+            ResultDesc: isValid ? 'Accepted' : 'Rejected'
+        });
+    } catch (error) {
+        res.status(500).json({
+            ResultCode: '1',
+            ResultDesc: 'Internal validation error'
+        });
+    }
+});
+
+// Confirmation URL handler
+app.post('/mpesa/confirm', express.json(), (req, res) => {
+    // Verify request authenticity
+    const signature = req.headers['x-mpesa-signature'];
+    if (!isValidSignature(signature, req.body)) {
+        return res.status(401).json({
+            ResultCode: 'C2B00012',
+            ResultDesc: 'Invalid signature'
+        });
+    }
+
+    // Process confirmed transaction
+    const { TransID, TransAmount, MSISDN } = req.body;
+    
+    try {
+        // Implement your confirmation logic
+        await processConfirmedTransaction({
+            transactionId: TransID,
+            amount: TransAmount,
+            phoneNumber: MSISDN
+        });
+        
+        res.json({
+            ResultCode: '0',
+            ResultDesc: 'Success'
+        });
+    } catch (error) {
+        res.status(500).json({
+            ResultCode: '1',
+            ResultDesc: 'Processing failed'
+        });
+    }
+});
+```
+
+### 3. URL Management
+Maintain URL configurations:
+
+```typescript
+class UrlManager {
+    private static instance: UrlManager;
+    private urls: {
+        confirmation?: string;
+        validation?: string;
+        registered: boolean;
+        lastRegistered?: Date;
+    } = {
+        registered: false
+    };
+
+    private constructor() {}
+
+    static getInstance(): UrlManager {
+        if (!UrlManager.instance) {
+            UrlManager.instance = new UrlManager();
+        }
+        return UrlManager.instance;
+    }
+
+    async ensureUrlsRegistered(
+        registerUrl: RegisterUrl,
+        confirmationUrl: string,
+        validationUrl: string
+    ): Promise<void> {
+        // Check if URLs have changed
+        if (
+            this.urls.confirmation !== confirmationUrl ||
+            this.urls.validation !== validationUrl ||
+            !this.urls.registered
+        ) {
+            await registerUrl.register(
+                process.env.MPESA_BUSINESS_SHORTCODE,
+                'Completed',
+                'RegisterURL',
+                confirmationUrl,
+                validationUrl
+            );
+
+            this.urls = {
+                confirmation: confirmationUrl,
+                validation: validationUrl,
+                registered: true,
+                lastRegistered: new Date()
+            };
+        }
+    }
+}
+```
+
+### 4. Error Recovery
+Implement retry logic for recoverable errors:
+
+```typescript
+const registerUrlWithRetry = async (
+    params: RegisterUrlParams,
+    maxRetries = 3
+): Promise<RegisterUrlResponse> => {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await registerUrl.register(/* ... */);
+        } catch (error) {
+            lastError = error;
+            
+            if (error instanceof NetworkError) {
+                // Wait before retrying
+                await new Promise(resolve => 
+                    setTimeout(resolve, attempt * 1000)
+                );
+                continue;
+            }
+            
+            // Don't retry other types of errors
+            throw error;
+        }
+    }
+    
+    throw lastError;
+};
+```
+
+## Rate Limiting
+
+The RegisterUrl class includes built-in rate limiting to prevent API abuse. Registration requests are automatically rate-limited based on M-Pesa's guidelines.
+
+```typescript
+// Rate limiting is handled automatically
+const registrations = await Promise.all([
+    registerUrl.register(/* ... */), // First request proceeds
+    registerUrl.register(/* ... */), // Second request is rate-limited
+    registerUrl.register(/* ... */)  // Third request is rate-limited
+]);
+```
+
+## Integration Examples
+
+### Express.js Integration
+Example of integrating URL registration in an Express.js application:
+
+```typescript
+const express = require('express');
+const { RegisterUrl } = require('mpesajs');
+
+const app = express();
+const registerUrl = new RegisterUrl();
+
+app.post('/register-urls', async (req, res) => {
+    try {
+        const { confirmationUrl, validationUrl } = req.body;
+        
+        // Validate URLs
+        if (!UrlValidator.isValidHttpsUrl(confirmationUrl)) {
+            throw new ValidationError('Invalid confirmation URL', 'confirmationUrl');
+        }
+        if (!UrlValidator.isValidHttpsUrl(validationUrl)) {
+            throw new ValidationError('Invalid validation URL', 'validationUrl');
+        }
+        
+        const result = await registerUrl.register(
+            process.env.MPESA_BUSINESS_SHORTCODE,
+            'Completed',
+            'RegisterURL',
+            confirmationUrl,
+            validationUrl
+        );
+        
+        res.json({
+            success: true,
+            message: result.responseMessage
+        });
+    } catch (error) {
+        res.status(400).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+```
+
+### Automated Registration
+Example of automatic URL registration during application startup:
+
+```typescript
+class MpesaService {
+    private registerUrl: RegisterUrl;
+    private urlManager: UrlManager;
+
+    constructor() {
+        this.registerUrl = new RegisterUrl();
+        this.urlManager = UrlManager.getInstance();
+    }
+
+    async initialize() {
+        const baseUrl = process.env.BASE_URL || 'https://api.example.com';
+        
+        try {
+            await this.urlManager.ensureUrlsRegistered(
+                this.registerUrl,
+                `${baseUrl}/mpesa/confirmation`,
+                `${baseUrl}/mpesa/validation`
+            );
+            console.log('M-Pesa URLs registered successfully');
+        } catch (error) {
+            console.error('Failed to register M-Pesa URLs:', error);
+            // Handle initialization failure
+            throw error;
+        }
+    }
+}
+
+// Usage in application startup
+const mpesaService = new MpesaService();
+await mpesaService.initialize();
+``` 

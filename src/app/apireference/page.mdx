@@ -1,0 +1,94 @@
+# API Reference
+
+Welcome to the MPesaJS API reference documentation. This SDK provides a simple and intuitive way to integrate M-Pesa payment services into your Node.js applications.
+
+## Core Components
+
+The SDK is organized into several core components:
+
+### [Auth](/apireference/auth)
+Handles authentication with the M-Pesa API by generating OAuth tokens using your consumer credentials.
+
+### [STK Push](/apireference/stkpush)
+Initiates mobile payments by sending payment requests directly to customers' phones.
+
+### [Payout](/apireference/payout)
+Manages Business-to-Customer (B2C) payments, allowing businesses to send money to customer phone numbers.
+
+### [URL Registration](/apireference/registerurl)
+Registers callback URLs for receiving transaction notifications and validation requests.
+
+### [Error Handling](/apireference/errors)
+Provides specialized error types and handlers for different scenarios.
+
+## Getting Started
+
+1. Install the package:
+```bash
+npm install mpesajs
+```
+
+2. Import the required components:
+```typescript
+import { Auth, StkPush, Payout, RegisterUrl } from 'mpesajs';
+```
+
+3. Initialize with your credentials:
+```typescript
+// Using environment variables (recommended)
+const auth = new Auth();
+const stkPush = new StkPush(auth);
+
+// Or with explicit credentials
+const auth = new Auth('your-consumer-key', 'your-consumer-secret');
+const stkPush = new StkPush(auth, true); // true for sandbox
+```
+
+## Environment Variables
+
+The SDK supports configuration through environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MPESA_CONSUMER_KEY` | Your M-Pesa consumer key | - |
+| `MPESA_CONSUMER_SECRET` | Your M-Pesa consumer secret | - |
+| `MPESA_SANDBOX` | Use sandbox environment | `'true'` |
+| `MPESA_BUSINESS_SHORTCODE` | Your business shortcode | - |
+| `MPESA_PHONE_NUMBER` | Default phone number for testing | - |
+| `MPESA_INITIATOR_NAME` | Name of the initiator for B2C | - |
+| `MPESA_SECURITY_CREDENTIAL` | Security credential for B2C | - |
+| `MPESA_CONFIRMATION_URL` | URL for transaction confirmations | - |
+| `MPESA_VALIDATION_URL` | URL for transaction validation | - |
+| `MPESA_QUEUE_TIMEOUT_URL` | URL for timeout notifications | - |
+| `MPESA_RESULT_URL` | URL for transaction results | - |
+
+## Rate Limiting
+
+The SDK includes built-in rate limiting to prevent API abuse. All API calls are automatically rate-limited based on M-Pesa's guidelines.
+
+## Error Handling
+
+All components use specialized error types that extend from `MpesaError`:
+- `AuthenticationError`: For authentication issues
+- `NetworkError`: For network-related problems
+- `ValidationError`: For input validation failures
+- `StkPushError`: For STK Push-specific errors
+- `PayoutError`: For B2C payment errors
+- `RegisterUrlError`: For URL registration issues
+
+Example error handling:
+```typescript
+try {
+  const result = await stkPush.sendStkPush(/* ... */);
+} catch (error) {
+  if (error instanceof StkPushError) {
+    console.error('STK Push failed:', error.message);
+  } else if (error instanceof NetworkError) {
+    console.error('Network issue:', error.message);
+  } else {
+    console.error('Unexpected error:', error);
+  }
+}
+```
+
+For detailed information about each component, please refer to their respective documentation pages. 

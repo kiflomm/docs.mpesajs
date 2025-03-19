@@ -1,0 +1,449 @@
+# STK Push
+
+The `StkPush` class enables you to initiate mobile payment requests that prompt customers to enter their M-Pesa PIN on their phones to authorize payments.
+
+## Class: StkPush
+
+```typescript
+class StkPush {
+    constructor(
+        auth: Auth,
+        sandbox?: boolean
+    );
+
+    public async sendStkPush(
+        businessShortCode: string,
+        passkey: string,
+        amount: number,
+        phoneNumber: string,
+        callbackUrl: string,
+        accountReference: string,
+        transactionDesc: string
+    ): Promise<StkPushResponse>;
+}
+
+interface StkPushResponse {
+    MerchantRequestID: string;
+    CheckoutRequestID: string;
+    ResponseCode: string;
+    ResponseDescription: string;
+    CustomerMessage: string;
+}
+```
+
+## Constructor
+
+Creates a new instance of the StkPush class for initiating mobile payments.
+
+### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `auth` | Auth | Yes | - | Instance of Auth class for token generation |
+| `sandbox` | boolean | No | `MPESA_SANDBOX` env var | Whether to use sandbox environment |
+
+### Examples
+
+```typescript
+// Using environment variables (recommended)
+const auth = new Auth();
+const stkPush = new StkPush(auth);
+
+// Explicit initialization
+const stkPush = new StkPush(
+    new Auth('consumer-key', 'consumer-secret'),
+    true // sandbox mode
+);
+
+// Production setup
+const stkPush = new StkPush(
+    new Auth(),
+    process.env.NODE_ENV === 'production' ? false : true
+);
+```
+
+## Methods
+
+### sendStkPush()
+
+Initiates an STK Push request to a customer's phone.
+
+```typescript
+public async sendStkPush(
+    businessShortCode: string,
+    passkey: string,
+    amount: number,
+    phoneNumber: string,
+    callbackUrl: string,
+    accountReference: string,
+    transactionDesc: string
+): Promise<StkPushResponse>;
+```
+
+#### Parameters
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| `businessShortCode` | string | Yes | - | Your PayBill/Till number |
+| `passkey` | string | Yes | - | Encryption key from M-Pesa |
+| `amount` | number | Yes | - | Amount to charge (must be positive) |
+| `phoneNumber` | string | Yes | - | Customer's phone number (format: 254XXXXXXXXX) |
+| `callbackUrl` | string | Yes | - | HTTPS URL to receive payment notification |
+| `accountReference` | string | Yes | - | Payment reference (max 12 chars) |
+| `transactionDesc` | string | Yes | - | Transaction description (max 13 chars) |
+
+#### Returns
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `MerchantRequestID` | string | Unique identifier for the payment request |
+| `CheckoutRequestID` | string | Unique identifier for the checkout process |
+| `ResponseCode` | string | Status code from M-Pesa API |
+| `ResponseDescription` | string | Description of the response status |
+| `CustomerMessage` | string | User-friendly message about the transaction |
+
+#### Examples
+
+```typescript
+// Basic payment request
+try {
+    const result = await stkPush.sendStkPush(
+        '174379',
+        'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919',
+        100, // Amount in KES
+        '254712345678',
+        'https://example.com/callback',
+        'INV001',
+        'Test Payment'
+    );
+    console.log('Payment initiated:', result.CheckoutRequestID);
+} catch (error) {
+    console.error('Payment failed:', error);
+}
+
+// With input validation
+const initiatePayment = async (phoneNumber: string, amount: number) => {
+    // Validate phone number format
+    if (!phoneNumber.match(/^254[0-9]{9}$/)) {
+        throw new ValidationError('Invalid phone number format', 'phoneNumber');
+    }
+
+    // Validate amount
+    if (amount <= 0 || amount > 150000) {
+        throw new ValidationError('Amount must be between 1 and 150,000', 'amount');
+    }
+
+    return stkPush.sendStkPush(
+        process.env.MPESA_BUSINESS_SHORTCODE!,
+        process.env.MPESA_PASSKEY!,
+        amount,
+        phoneNumber,
+        process.env.MPESA_CALLBACK_URL!,
+        `INV${Date.now()}`,
+        'Payment'
+    );
+};
+```
+
+## Error Handling
+
+The `StkPush` class can throw several types of errors:
+
+### ValidationError
+Thrown when input parameters are invalid.
+
+```typescript
+try {
+    await stkPush.sendStkPush(/* ... */);
+} catch (error) {
+    if (error instanceof ValidationError) {
+        console.error(`Validation failed for ${error.field}:`, error.message);
+        // Handle specific validation errors
+        switch (error.field) {
+            case 'phoneNumber':
+                // Prompt user to correct phone number
+                break;
+            case 'amount':
+                // Show valid amount range
+                break;
+        }
+    }
+}
+```
+
+### StkPushError
+Thrown for M-Pesa API-specific errors.
+
+```typescript
+try {
+    await stkPush.sendStkPush(/* ... */);
+} catch (error) {
+    if (error instanceof StkPushError) {
+        console.error(
+            `Transaction failed: ${error.message}`,
+            `Request ID: ${error.merchantRequestId}`,
+            `Response Code: ${error.responseCode}`
+        );
+        // Handle specific response codes
+        switch (error.responseCode) {
+            case '1032':
+                console.error('Transaction cancelled by user');
+                break;
+            case '1037':
+                console.error('Timeout waiting for user input');
+                break;
+        }
+    }
+}
+```
+
+### NetworkError
+Thrown when network connectivity issues occur.
+
+```typescript
+try {
+    await stkPush.sendStkPush(/* ... */);
+} catch (error) {
+    if (error instanceof NetworkError) {
+        console.error('Network issue - retrying payment');
+        // Implement retry logic
+    }
+}
+```
+
+## Best Practices
+
+### 1. Input Validation
+Validate inputs before making API calls:
+
+```typescript
+class PaymentValidator {
+    static validatePhoneNumber(phoneNumber: string): boolean {
+        return /^254[0-9]{9}$/.test(phoneNumber);
+    }
+
+    static validateAmount(amount: number): boolean {
+        return amount > 0 && amount <= 150000;
+    }
+
+    static validateReference(reference: string): boolean {
+        return reference.length <= 12;
+    }
+
+    static validateDescription(desc: string): boolean {
+        return desc.length <= 13;
+    }
+}
+
+// Usage
+const initiatePayment = async (data: PaymentData) => {
+    if (!PaymentValidator.validatePhoneNumber(data.phoneNumber)) {
+        throw new ValidationError('Invalid phone number', 'phoneNumber');
+    }
+    // ... other validations
+};
+```
+
+### 2. Callback URL Handling
+Implement robust callback handling:
+
+```typescript
+// Express.js callback handler
+app.post('/mpesa/callback', express.json(), (req, res) => {
+    const {
+        Body: {
+            stkCallback: {
+                MerchantRequestID,
+                CheckoutRequestID,
+                ResultCode,
+                ResultDesc
+            }
+        }
+    } = req.body;
+
+    // Process callback
+    if (ResultCode === 0) {
+        // Payment successful
+        await processSuccessfulPayment({
+            requestId: MerchantRequestID,
+            checkoutId: CheckoutRequestID
+        });
+    } else {
+        // Payment failed
+        await processFailedPayment({
+            requestId: MerchantRequestID,
+            resultCode: ResultCode,
+            resultDesc: ResultDesc
+        });
+    }
+
+    res.json({ success: true });
+});
+```
+
+### 3. Transaction Tracking
+Maintain transaction records:
+
+```typescript
+class TransactionTracker {
+    private transactions: Map<string, {
+        checkoutRequestId: string;
+        amount: number;
+        timestamp: number;
+        status: 'pending' | 'completed' | 'failed';
+    }> = new Map();
+
+    async trackPayment(merchantRequestId: string, data: PaymentData) {
+        this.transactions.set(merchantRequestId, {
+            checkoutRequestId: data.checkoutRequestId,
+            amount: data.amount,
+            timestamp: Date.now(),
+            status: 'pending'
+        });
+    }
+
+    async updateStatus(merchantRequestId: string, status: 'completed' | 'failed') {
+        const tx = this.transactions.get(merchantRequestId);
+        if (tx) {
+            tx.status = status;
+            this.transactions.set(merchantRequestId, tx);
+        }
+    }
+}
+```
+
+### 4. Error Recovery
+Implement retry logic for recoverable errors:
+
+```typescript
+const initiatePaymentWithRetry = async (
+    params: PaymentParams,
+    maxRetries = 3
+): Promise<StkPushResponse> => {
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+            return await stkPush.sendStkPush(/* ... */);
+        } catch (error) {
+            lastError = error;
+            
+            if (error instanceof NetworkError) {
+                // Wait before retrying
+                await new Promise(resolve => 
+                    setTimeout(resolve, attempt * 1000)
+                );
+                continue;
+            }
+            
+            // Don't retry other types of errors
+            throw error;
+        }
+    }
+    
+    throw lastError;
+};
+```
+
+## Rate Limiting
+
+The STK Push class includes built-in rate limiting to prevent API abuse. Requests are automatically rate-limited based on M-Pesa's guidelines.
+
+```typescript
+// Rate limiting is handled automatically
+const payments = await Promise.all([
+    stkPush.sendStkPush(/* ... */), // First request proceeds
+    stkPush.sendStkPush(/* ... */), // Second request is rate-limited
+    stkPush.sendStkPush(/* ... */)  // Third request is rate-limited
+]);
+```
+
+## Integration Examples
+
+### Express.js Integration
+Example of integrating STK Push in an Express.js application:
+
+```typescript
+const express = require('express');
+const { Auth, StkPush } = require('mpesajs');
+
+const app = express();
+const auth = new Auth();
+const stkPush = new StkPush(auth);
+
+app.post('/payment', async (req, res) => {
+    try {
+        const { phoneNumber, amount } = req.body;
+        
+        const result = await stkPush.sendStkPush(
+            process.env.MPESA_BUSINESS_SHORTCODE!,
+            process.env.MPESA_PASSKEY!,
+            amount,
+            phoneNumber,
+            `${req.protocol}://${req.get('host')}/callback`,
+            `INV${Date.now()}`,
+            'Payment'
+        );
+        
+        res.json({
+            success: true,
+            checkoutRequestId: result.CheckoutRequestID
+        });
+    } catch (error) {
+        res.status(400).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+```
+
+### React Integration
+Example of using STK Push in a React application:
+
+```typescript
+const PaymentForm: React.FC = () => {
+    const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    
+    const handlePayment = async (data: FormData) => {
+        setLoading(true);
+        setError(null);
+        
+        try {
+            const response = await fetch('/api/payment', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    phoneNumber: data.phoneNumber,
+                    amount: data.amount
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (!result.success) {
+                throw new Error(result.error);
+            }
+            
+            // Show success message
+        } catch (error) {
+            setError(error.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+    
+    return (
+        <form onSubmit={handlePayment}>
+            {/* Form fields */}
+            {error && <div className="error">{error}</div>}
+            <button type="submit" disabled={loading}>
+                {loading ? 'Processing...' : 'Pay'}
+            </button>
+        </form>
+    );
+};
+``` 
