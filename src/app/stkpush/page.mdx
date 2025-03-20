@@ -1,18 +1,18 @@
 # STK Push
 
-The STK Push module provides functionality to initiate mobile payments by sending payment requests directly to customers' phones, prompting them to enter their M-Pesa PIN to authorize payments. This documentation covers the `StkPush` class and its methods.
+The STK Push module provides functionality to initiate Mobile Money payment requests to customers via the Safaricom M-Pesa STK Push API. This documentation covers the `StkPush` class and its methods for managing payment requests.
 
 ## StkPush Class
 
-The `StkPush` class is responsible for initiating payment requests through the M-Pesa API's STK Push functionality.
+The `StkPush` class is responsible for initiating STK Push payment requests to M-Pesa customers, triggering a payment prompt on the customer's phone to securely authorize transactions.
 
 ### Constructor
 
-Creates a new instance of the StkPush class. Requires an Auth instance for authentication with the M-Pesa API.
+Creates a new instance of the StkPush class. The parameters can be automatically populated from environment variables when using the CLI tool for initialization.
 
 #### Parameters:
 
-- `auth`: An instance of the Auth class for token generation.
+- `auth`: An instance of the Auth class for generating M-Pesa API tokens
 - `sandbox`: Boolean flag to determine the environment. Defaults to `MPESA_SANDBOX` environment variable.
 
 #### Example
@@ -20,11 +20,16 @@ Creates a new instance of the StkPush class. Requires an Auth instance for authe
 ```typescript
 // When project is initialized using CLI, environment variables are automatically used
 const auth = new Auth();
-const stkPush = new StkPush(auth, process.env.MPESA_SANDBOX === 'true');
+const stkPush = new StkPush(
+    auth,
+    process.env.MPESA_SANDBOX === 'true'
+);
 
-// Direct initialization with credentials
-const auth = new Auth('your-consumer-key', 'your-consumer-secret');
-const stkPush = new StkPush(auth, true); // true for sandbox, false for production
+// Direct initialization
+const stkPush = new StkPush(
+    auth,
+    true // true for sandbox, false for production
+);
 ```
 
 ### Methods
@@ -32,102 +37,84 @@ const stkPush = new StkPush(auth, true); // true for sandbox, false for producti
 #### sendStkPush()
 
 ```typescript
-public async sendStkPush(
-    businessShortCode: string,
-    passkey: string,
+async sendStkPush(
     amount: number,
-    phoneNumber: string,
-    callbackUrl: string,
+    transactionDesc: string,
     accountReference: string,
-    transactionDesc: string
-): Promise<any>
+    businessShortCode?: string,
+    passkey?: string,
+    phoneNumber?: string,
+    callbackUrl?: string,
+): Promise<StkPushResponse>
 ```
 
-Sends an STK Push request to initiate a payment via the Safaricom API. This method handles:
+Initiates an STK Push transaction to request payment from a customer. This method handles:
 
 1. Input validation
-2. Credentials generation (timestamp, password)
-3. Access token retrieval
-4. Payload construction
-5. API request
-6. Response parsing
-7. Rate limiting
+2. Security credential generation
+3. Token acquisition
+4. API request
+5. Response handling
+6. Rate limiting
 
 ##### Parameters
 
-- `businessShortCode`: The business shortcode (PayBill or Till Number).
-- `passkey`: The passkey provided by Safaricom during integration.
-- `amount`: The amount to be transacted (must be a positive number).
-- `phoneNumber`: The customer's phone number initiating the transaction.
-- `callbackUrl`: The HTTPS URL for receiving payment notifications.
-- `accountReference`: The account reference (max 12 characters).
-- `transactionDesc`: A description of the transaction (max 13 characters).
+- `amount`: The amount to be paid (required, must be > 0)
+- `transactionDesc`: Description of the transaction (required, max 13 chars)
+- `accountReference`: Reference identifier for the transaction (required, max 12 chars)
+- `businessShortCode`: The business short code (defaults to `MPESA_BUSINESS_SHORTCODE` env var)
+- `passkey`: The passkey for password generation (defaults to `MPESA_PASSKEY` env var)
+- `phoneNumber`: The customer's phone number in format 251XXXXXXXXX (defaults to `MPESA_PHONE_NUMBER` env var)
+- `callbackUrl`: HTTPS URL for receiving transaction results (defaults to `MPESA_CALLBACK_URL` env var)
 
 ##### Returns
 
 An object containing:
-- `MerchantRequestID`: Unique identifier for the payment request
-- `CheckoutRequestID`: Unique identifier for the checkout process
-- `ResponseCode`: Status code from the M-Pesa API
+- `MerchantRequestID`: Unique identifier for the merchant request
+- `CheckoutRequestID`: Unique identifier for the checkout/payment request
+- `ResponseCode`: Response code from M-Pesa API (0 indicates success)
 - `ResponseDescription`: Description of the response status
-- `CustomerMessage`: User-friendly message about the transaction
+- `CustomerMessage`: Message that can be displayed to the customer
 
 ##### Example
 
 ```typescript
 try {
-    const auth = new Auth('your-consumer-key', 'your-consumer-secret');
+    const auth = new Auth();
     const stkPush = new StkPush(auth);
     
     const result = await stkPush.sendStkPush(
-        '174379', // businessShortCode
-        'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919', // passkey
-        100, // amount
-        '2547XXXXXXXX', // phoneNumber
-        'https://example.com/callback', // callbackUrl
-        'INV001', // accountReference
-        'Payment for X' // transactionDesc
+        1, // amount
+        "Test Payment", // transactionDesc
+        "TestAccount", // accountReference
+        "123456", // businessShortCode (optional)
+        "passkey123", // passkey (optional)
+        "251912345678", // phoneNumber (optional)
+        "https://example.com/callback" // callbackUrl (optional)
     );
     
-    console.log('Payment initiated:', result);
+    console.log('STK Push initiated:', result);
 } catch (error) {
-    console.error('Payment failed:', error.message);
+    console.error('STK Push failed:', error.message);
 }
 ```
-
-#### generatePassword() (private)
-
-```typescript
-private generatePassword(
-    businessShortCode: string, 
-    passkey: string, 
-    timestamp: string
-): string
-```
-
-Generates the password for the STK Push request. The password is created by:
-1. Concatenating the business shortcode, passkey and timestamp
-2. Base64 encoding the concatenated string
-
-This is an internal method used by the `sendStkPush()` method.
 
 ## Error Handling
 
 The STK Push module includes comprehensive error handling:
 
 ### ValidationError
-Thrown when:
-- Missing or invalid business shortcode or passkey
-- Amount is not a positive number
-- Phone number format is invalid (must be in the format `251XXXXXXXXX`)
-- Callback URL doesn't use HTTPS protocol
-- Account reference or transaction description exceeds maximum length
+Thrown when input parameters are invalid:
+- Invalid phone number format
+- Non-positive amount
+- Non-HTTPS callback URL
+- Exceeding character limits for descriptions or references
 
 ### StkPushError
-Specific to STK Push payment failures:
-- User entered wrong M-PESA PIN (`TP40087`)
-- M-PESA system internal error (`17`)
-- Other API response errors with appropriate error descriptions
+Specific to STK Push operation failures:
+- API response errors
+- Transaction processing issues
+- Payment request failures
 
 ### NetworkError
 Thrown for network-related issues:
@@ -135,100 +122,67 @@ Thrown for network-related issues:
 - Timeout errors
 - No response from API
 
+### AuthenticationError
+Thrown when token generation fails:
+- Invalid credentials
+- API authentication failures
+
 ### Example Error Handling
 
 ```typescript
 try {
-    const result = await stkPush.sendStkPush(
-        '174379', 
-        'your-passkey', 
-        100, 
-        '2547XXXXXXXX', 
-        'https://example.com/callback', 
-        'INV001', 
-        'Payment'
-    );
+    const result = await stkPush.sendStkPush(1, "Test Payment", "TestAccount");
     console.log('Success:', result);
 } catch (error) {
     if (error instanceof ValidationError) {
-        console.error('Validation failed:', error.message);
+        console.error('Validation failed:', error.message, 'Field:', error.field);
     } else if (error instanceof StkPushError) {
-        console.error('STK Push failed:', error.message);
-        console.error('Response Code:', error.responseCode);
-        console.error('Checkout Request ID:', error.checkoutRequestId);
+        console.error('STK Push failed:', error.message, 'Code:', error.responseCode);
+    } else if (error instanceof AuthenticationError) {
+        console.error('Authentication failed:', error.message, 'Code:', error.errorCode);
     } else if (error instanceof NetworkError) {
         console.error('Network error:', error.message);
+    } else if (error instanceof MpesaError) {
+        console.error('General M-Pesa Error:', error.message);
     } else {
-        console.error('Unexpected error:', error.message);
+        console.error('Unexpected error:', error);
     }
 }
 ```
 
 ## Rate Limiting
 
-The module includes built-in rate limiting through the `RateLimiter` class to prevent:
+The STK Push module includes built-in rate limiting through the `RateLimiter` class to prevent:
 - Excessive payment requests
-- API throttling 
-- Service blocking
+- API throttling
+- Account blocking
 
-## Input Validation
+The rate limiter automatically manages request frequency, ensuring your application stays within M-Pesa's API limits.
 
-The STK Push module performs validation on all inputs:
+## Environment Variables
 
-| Parameter | Validation |
-|-----------|------------|
-| `businessShortCode` | Must be a non-empty string |
-| `passkey` | Must be a non-empty string |
-| `amount` | Must be a positive number |
-| `phoneNumber` | Must match Ethiopian phone number format `251[7-9][0-9]{8}` |
-| `callbackUrl` | Must start with `https://` |
-| `accountReference` | String with maximum length of 12 characters |
-| `transactionDesc` | String with maximum length of 13 characters |
+The StkPush module uses these environment variables:
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `MPESA_SANDBOX` | Use sandbox environment | "true" |
+| `MPESA_BUSINESS_SHORTCODE` | Business shortcode | - |
+| `MPESA_PASSKEY` | Passkey for security credential | - |
+| `MPESA_PHONE_NUMBER` | Default customer phone number | - |
+| `MPESA_CALLBACK_URL` | Results notification URL | - |
+
+## Best Practices
+
+1. **Validation**: Always validate phone numbers and amounts before sending
+2. **Error Handling**: Implement comprehensive error handling for all requests
+3. **URLs**: Use HTTPS URLs for callbacks
+4. **Testing**: Use sandbox environment for development and testing
+5. **User Experience**: Provide clear transaction descriptions to customers
+6. **Security**: Store passkeys securely using environment variables
 
 ## API Endpoints
 
 The module uses these endpoints based on environment:
 
-- Sandbox: `https://apisandbox.safaricom.et/mpesa/stkpush/v3/processrequest`
-- Production: `https://api.safaricom.et/mpesa/stkpush/v3/processrequest`
-
-## Best Practices
-
-1. **Error Handling**: Implement proper error handling for all STK Push requests
-2. **Callback Security**: Secure callback endpoints with proper authentication
-3. **Amount Validation**: Validate amounts on your server before initiating payments
-4. **Phone Number Validation**: Ensure phone numbers are correctly formatted
-5. **Idempotency**: Generate unique transaction references to prevent duplicate payments
-6. **Testing**: Use sandbox environment for thorough testing before going to production
-
-## Callback Response Handling
-
-When a customer completes or cancels an STK Push payment, M-Pesa sends a callback to your specified URL. Handle this callback to confirm the payment status:
-
-```typescript
-// Example Express.js endpoint to handle STK Push callbacks
-app.post('/callback', (req, res) => {
-    const callbackData = req.body;
-    
-    // Extract STK Push callback response details
-    const { Body: { stkCallback = {} } = {} } = callbackData;
-    const { 
-        MerchantRequestID, 
-        CheckoutRequestID, 
-        ResultCode, 
-        ResultDesc 
-    } = stkCallback;
-    
-    // ResultCode 0 indicates success
-    if (ResultCode === 0) {
-        console.log('Payment successful:', CheckoutRequestID);
-        // Process successful payment (update order status, etc.)
-    } else {
-        console.log('Payment failed:', ResultDesc);
-        // Handle payment failure
-    }
-    
-    // Always respond to the callback
-    res.status(200).json({ success: true });
-});
-```
+- Sandbox: `https://apisandbox.safaricom.et/mpesa/stkpush/v1/processrequest`
+- Production: `https://api.safaricom.et/mpesa/stkpush/v1/processrequest`

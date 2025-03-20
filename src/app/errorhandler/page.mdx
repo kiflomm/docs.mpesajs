@@ -1,0 +1,465 @@
+# Error Handling in mpesajs
+
+The mpesajs SDK implements a comprehensive error handling system designed to help developers handle various error scenarios that may occur during M-Pesa API interactions. This guide explains the error handling architecture and provides examples of how to handle different types of errors effectively.
+
+## Error Hierarchy
+
+All errors in the SDK inherit from the base `MpesaError` class, which extends the native JavaScript `Error` class. Here's the error hierarchy:
+
+```typescript
+MpesaError
+├── AuthenticationError
+├── NetworkError
+├── ValidationError
+├── StkPushError
+├── PayoutError
+└── RegisterUrlError
+```
+
+## Error Types in Detail
+
+### MpesaError
+The base error class that all other SDK errors extend from. Use this to catch any M-Pesa related error.
+
+```typescript
+class MpesaError extends Error {
+    name: 'MpesaError';
+    message: string;
+}
+```
+
+### AuthenticationError
+Thrown during authentication failures with the M-Pesa API. Common when there are issues with credentials or token generation.
+
+```typescript
+class AuthenticationError extends MpesaError {
+    name: 'AuthenticationError';
+    errorCode?: string;
+}
+```
+
+Common error codes and their meanings:
+- `999991`: Invalid client ID - Check your consumer key
+- `999996`: Invalid authentication type - Ensure Basic Auth is selected
+- `999997`: Invalid authorization header - Check your consumer secret
+- `999998`: Invalid grant type - Must be "client_credentials"
+
+### NetworkError
+Represents network-related issues when communicating with the M-Pesa API.
+
+```typescript
+class NetworkError extends MpesaError {
+    name: 'NetworkError';
+}
+```
+
+Common scenarios:
+- API timeout
+- No internet connection
+- DNS resolution failures
+- CORS issues in browser environments
+- SSL/TLS handshake failures
+
+### ValidationError
+Occurs when input validation fails for API requests. Includes field-specific validation details.
+
+```typescript
+class ValidationError extends MpesaError {
+    name: 'ValidationError';
+    field?: string;
+}
+```
+
+Common validation rules:
+- Phone numbers must match pattern: ^251[7-9][0-9]{8}$
+- Amount must be greater than 0
+- Callback URLs must use HTTPS
+- Reference must not exceed 12 characters
+- Description must not exceed 13 characters
+
+### StkPushError
+Specific to STK Push transaction failures. Includes detailed transaction identifiers.
+
+```typescript
+class StkPushError extends MpesaError {
+    name: 'StkPushError';
+    responseCode?: string;
+    merchantRequestId?: string;
+    checkoutRequestId?: string;
+}
+```
+
+Common error codes:
+- `TP40087`: Wrong M-PESA PIN entered
+- `17`: M-PESA system internal error
+- `1037`: Timeout waiting for user input
+- `1032`: Transaction canceled by user
+- `1001`: Insufficient funds
+
+### PayoutError
+Handles B2C payment-related errors. Includes comprehensive transaction tracking details.
+
+```typescript
+class PayoutError extends MpesaError {
+    name: 'PayoutError';
+    errorCode?: string;
+    requestId?: string;
+    responseCode?: string;
+    conversationId?: string;
+}
+```
+
+Common scenarios:
+- Insufficient funds in business account
+- Invalid recipient number
+- Daily transaction limit exceeded
+- Invalid initiator credentials
+- System downtime
+
+### RegisterUrlError
+Specific to URL registration failures. Includes shortcode and response details.
+
+```typescript
+class RegisterUrlError extends MpesaError {
+    name: 'RegisterUrlError';
+    responseCode?: string;
+    shortCode?: string;
+}
+```
+
+Common issues:
+- Invalid URL format
+- Non-HTTPS URLs
+- Unauthorized shortcode
+- Invalid security credentials
+
+## Comprehensive Error Handling Strategies
+
+### 1. Input Validation
+
+Always validate input before making API calls to prevent unnecessary network requests:
+
+```typescript
+function validatePaymentDetails(details: PaymentDetails): void {
+    // Validate amount
+    if (details.amount <= 0) {
+        throw new ValidationError('Amount must be greater than 0', 'amount');
+    }
+
+    // Validate phone number format
+    if (!/^251[7-9][0-9]{8}$/.test(details.phoneNumber)) {
+        throw new ValidationError(
+            'Invalid phone number format. Must start with 251 and be 12 digits long',
+            'phoneNumber'
+        );
+    }
+
+    // Validate callback URL
+    if (!details.callbackUrl.startsWith('https://')) {
+        throw new ValidationError('Callback URL must use HTTPS protocol', 'callbackUrl');
+    }
+
+    // Validate reference and description length
+    if (details.reference.length > 12) {
+        throw new ValidationError('Reference must not exceed 12 characters', 'reference');
+    }
+
+    if (details.description.length > 13) {
+        throw new ValidationError('Description must not exceed 13 characters', 'description');
+    }
+}
+```
+
+### 2. Type-Specific Error Handling
+
+Implement comprehensive error handling for different scenarios:
+
+```typescript
+try {
+    await mpesa.stkPush.sendStkPush({
+        // ... parameters
+    });
+} catch (error) {
+    // Handle authentication errors
+    if (error instanceof AuthenticationError) {
+        console.error('Authentication failed:', {
+            name: error.name,
+            message: error.message,
+            errorCode: error.errorCode
+        });
+        // Implement token refresh or credential validation
+    }
+
+    // Handle STK Push specific errors
+    else if (error instanceof StkPushError) {
+        console.error('STK Push failed:', {
+            message: error.message,
+            responseCode: error.responseCode,
+            merchantRequestId: error.merchantRequestId,
+            checkoutRequestId: error.checkoutRequestId
+        });
+        // Implement user feedback and retry logic
+    }
+
+    // Handle network errors with retry
+    else if (error instanceof NetworkError) {
+        console.error('Network error:', error.message);
+        await retryWithExponentialBackoff(operation);
+    }
+
+    // Handle validation errors
+    else if (error instanceof ValidationError) {
+        console.error('Validation failed:', {
+            field: error.field,
+            message: error.message
+        });
+        // Update UI to show validation errors
+    }
+
+    // Handle unexpected errors
+    else {
+        console.error('Unexpected error:', error);
+        // Log to monitoring service
+    }
+}
+```
+
+### 3. Retry Mechanism with Exponential Backoff
+
+Implement smart retry logic for transient failures:
+
+```typescript
+async function retryWithExponentialBackoff<T>(
+    operation: () => Promise<T>,
+    maxRetries = 3,
+    baseDelay = 1000
+): Promise<T> {
+    let attempts = 0;
+    
+    while (attempts < maxRetries) {
+        try {
+            return await operation();
+        } catch (error) {
+            attempts++;
+            
+            if (attempts === maxRetries) {
+                throw error;
+            }
+            
+            if (error instanceof NetworkError || 
+                (error instanceof StkPushError && error.responseCode === '17')) {
+                const delay = baseDelay * Math.pow(2, attempts - 1);
+                const jitter = Math.random() * 100;
+                await new Promise(resolve => setTimeout(resolve, delay + jitter));
+                continue;
+            }
+            
+            throw error;
+        }
+    }
+    
+    throw new Error('Maximum retry attempts reached');
+}
+```
+
+### 4. Structured Error Logging
+
+Implement detailed error logging for debugging and monitoring:
+
+```typescript
+interface ErrorLog {
+    timestamp: string;
+    errorType: string;
+    message: string;
+    details: Record<string, any>;
+    stack?: string;
+}
+
+function logError(error: Error): ErrorLog {
+    const log: ErrorLog = {
+        timestamp: new Date().toISOString(),
+        errorType: error.constructor.name,
+        message: error.message,
+        details: {},
+    };
+
+    if (error instanceof StkPushError) {
+        log.details = {
+            responseCode: error.responseCode,
+            merchantRequestId: error.merchantRequestId,
+            checkoutRequestId: error.checkoutRequestId
+        };
+    } else if (error instanceof PayoutError) {
+        log.details = {
+            errorCode: error.errorCode,
+            requestId: error.requestId,
+            responseCode: error.responseCode,
+            conversationId: error.conversationId
+        };
+    } else if (error instanceof ValidationError) {
+        log.details = {
+            field: error.field
+        };
+    }
+
+    if (process.env.NODE_ENV === 'development') {
+        log.stack = error.stack;
+    }
+
+    // Log to your preferred logging service
+    console.error('Error occurred:', log);
+    return log;
+}
+```
+
+## Real-World Implementation Examples
+
+### 1. STK Push Implementation
+
+```typescript
+async function initiatePayment(paymentDetails: PaymentDetails): Promise<void> {
+    try {
+        // Validate input first
+        validatePaymentDetails(paymentDetails);
+
+        const auth = new Auth();
+        const mpesa = new StkPush(auth);
+
+        const response = await mpesa.sendStkPush(
+            config.businessShortCode,
+            config.passkey,
+            paymentDetails.amount,
+            paymentDetails.phoneNumber,
+            paymentDetails.callbackUrl,
+            paymentDetails.reference,
+            paymentDetails.description
+        );
+
+        console.log('Payment initiated:', {
+            MerchantRequestID: response.MerchantRequestID,
+            CheckoutRequestID: response.CheckoutRequestID,
+            ResponseDescription: response.ResponseDescription
+        });
+
+    } catch (error) {
+        logError(error);
+        handlePaymentError(error);
+    }
+}
+```
+
+### 2. B2C Payout Implementation
+
+```typescript
+async function processPayout(amount: number, phone: string): Promise<void> {
+    try {
+        const auth = new Auth();
+        const payout = new Payout(auth);
+
+        const response = await payout.send(amount, phone);
+        
+        console.log('Payout successful:', {
+            ConversationID: response.ConversationID,
+            ResponseDescription: response.ResponseDescription
+        });
+
+    } catch (error) {
+        if (error instanceof PayoutError) {
+            switch(error.responseCode) {
+                case 'A001':
+                    console.error('Insufficient funds in business account');
+                    // Notify finance team
+                    break;
+                case 'A002':
+                    console.error('Invalid recipient number');
+                    // Notify user to check number
+                    break;
+                default:
+                    console.error('Payout failed:', error.message);
+            }
+        }
+        logError(error);
+        throw error;
+    }
+}
+```
+
+### 3. URL Registration Implementation
+
+```typescript
+async function setupCallbackUrls(): Promise<void> {
+    try {
+        const auth = new Auth();
+        const register = new RegisterUrl();
+
+        const response = await register.register();
+        
+        console.log('URLs registered:', {
+            responseCode: response.responseCode,
+            responseMessage: response.responseMessage
+        });
+
+    } catch (error) {
+        if (error instanceof RegisterUrlError) {
+            console.error('URL registration failed:', {
+                responseCode: error.responseCode,
+                shortCode: error.shortCode
+            });
+            // Implement specific handling based on response code
+        }
+        logError(error);
+        throw error;
+    }
+}
+```
+
+## Error Prevention Best Practices
+
+1. **Input Validation**
+   - Validate all input data before making API calls
+   - Use strong typing with TypeScript
+   - Implement comprehensive validation rules
+
+2. **Security**
+   - Keep credentials secure and never expose them in client-side code
+   - Use environment variables for sensitive data
+   - Implement proper access control
+
+3. **Monitoring and Logging**
+   - Implement comprehensive error logging
+   - Use structured logging format
+   - Monitor error patterns and rates
+   - Set up alerts for critical errors
+
+4. **Resilience**
+   - Implement retry mechanisms for transient failures
+   - Use circuit breakers for dependent services
+   - Handle rate limiting appropriately
+   - Implement proper timeout handling
+
+5. **Testing**
+   - Write unit tests for error scenarios
+   - Implement integration tests
+   - Test error handling logic
+   - Simulate various error conditions
+
+6. **Documentation**
+   - Document error handling procedures
+   - Maintain error code reference
+   - Update documentation regularly
+   - Include examples and solutions
+
+## Conclusion
+
+The mpesajs SDK's error handling system is designed to help you build robust applications that can gracefully handle various error scenarios. By following these best practices and implementing proper error handling, you can create a better user experience and maintain a more stable application.
+
+Remember to:
+- Always validate input data
+- Implement proper error handling for each error type
+- Use structured logging
+- Implement retry mechanisms where appropriate
+- Keep security in mind
+- Monitor and analyze errors
+- Test error handling thoroughly
+
+For more examples and detailed implementation guides, check out the [examples directory](https://github.com/your-repo/mpesajs/tree/main/examples) in the repository.

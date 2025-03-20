@@ -1,6 +1,6 @@
 # STK Push
 
-The `StkPush` class enables you to initiate mobile payment requests that prompt customers to enter their M-Pesa PIN on their phones to authorize payments.
+The `StkPush` class provides functionality to initiate Lipa Na M-Pesa Online (STK Push) payments, allowing you to prompt customers to make payments directly from their M-Pesa accounts via their mobile phones.
 
 ## Class: StkPush
 
@@ -12,53 +12,48 @@ class StkPush {
     );
 
     public async sendStkPush(
-        businessShortCode: string,
-        passkey: string,
         amount: number,
-        phoneNumber: string,
-        callbackUrl: string,
+        transactionDesc: string,
         accountReference: string,
-        transactionDesc: string
+        businessShortCode?: string,
+        passkey?: string,
+        phoneNumber?: string,
+        callbackUrl?: string
     ): Promise<StkPushResponse>;
-}
-
-interface StkPushResponse {
-    MerchantRequestID: string;
-    CheckoutRequestID: string;
-    ResponseCode: string;
-    ResponseDescription: string;
-    CustomerMessage: string;
 }
 ```
 
 ## Constructor
 
-Creates a new instance of the StkPush class for initiating mobile payments.
+Creates a new instance of the StkPush class for initiating M-Pesa STK Push payment requests.
 
 ### Parameters
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `auth` | Auth | Yes | - | Instance of Auth class for token generation |
+| `auth` | Auth | Yes | - | An instance of the Auth class for token generation |
 | `sandbox` | boolean | No | `MPESA_SANDBOX` env var | Whether to use sandbox environment |
 
 ### Examples
 
 ```typescript
-// Using environment variables (recommended)
+// Using environment variables with default sandbox mode
 const auth = new Auth();
 const stkPush = new StkPush(auth);
 
-// Explicit initialization
-const stkPush = new StkPush(
-    new Auth('consumer-key', 'consumer-secret'),
-    true // sandbox mode
+// Explicit initialization for production
+const auth = new Auth(
+    'your-consumer-key',
+    'your-consumer-secret',
+    false
 );
+const stkPush = new StkPush(auth, false);
 
-// Production setup
+// Mixed usage
+const auth = new Auth();
 const stkPush = new StkPush(
-    new Auth(),
-    process.env.NODE_ENV === 'production' ? false : true
+    auth,
+    process.env.NODE_ENV !== 'production'
 );
 ```
 
@@ -66,17 +61,17 @@ const stkPush = new StkPush(
 
 ### sendStkPush()
 
-Initiates an STK Push request to a customer's phone.
+Initiates an STK Push transaction to request payment from a customer.
 
 ```typescript
 public async sendStkPush(
-    businessShortCode: string,
-    passkey: string,
     amount: number,
-    phoneNumber: string,
-    callbackUrl: string,
+    transactionDesc: string,
     accountReference: string,
-    transactionDesc: string
+    businessShortCode?: string,
+    passkey?: string,
+    phoneNumber?: string,
+    callbackUrl?: string
 ): Promise<StkPushResponse>;
 ```
 
@@ -84,65 +79,57 @@ public async sendStkPush(
 
 | Parameter | Type | Required | Default | Description |
 |-----------|------|----------|---------|-------------|
-| `businessShortCode` | string | Yes | - | Your PayBill/Till number |
-| `passkey` | string | Yes | - | Encryption key from M-Pesa |
-| `amount` | number | Yes | - | Amount to charge (must be positive) |
-| `phoneNumber` | string | Yes | - | Customer's phone number (format: 254XXXXXXXXX) |
-| `callbackUrl` | string | Yes | - | HTTPS URL to receive payment notification |
-| `accountReference` | string | Yes | - | Payment reference (max 12 chars) |
-| `transactionDesc` | string | Yes | - | Transaction description (max 13 chars) |
+| `amount` | number | Yes | - | The amount to be paid (must be greater than 0) |
+| `transactionDesc` | string | Yes | - | Description of the transaction (max 13 chars) |
+| `accountReference` | string | Yes | - | Reference for the transaction (max 12 chars) |
+| `businessShortCode` | string | No | `MPESA_BUSINESS_SHORTCODE` env var | The business short code |
+| `passkey` | string | No | `MPESA_PASSKEY` env var | The passkey for generating the password |
+| `phoneNumber` | string | No | `MPESA_PHONE_NUMBER` env var | The customer's phone number (must start with 251 and be 12 digits) |
+| `callbackUrl` | string | No | `MPESA_CALLBACK_URL` env var | The HTTPS URL where payment results will be sent |
 
 #### Returns
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `MerchantRequestID` | string | Unique identifier for the payment request |
-| `CheckoutRequestID` | string | Unique identifier for the checkout process |
-| `ResponseCode` | string | Status code from M-Pesa API |
+| `MerchantRequestID` | string | Unique identifier for the merchant request |
+| `CheckoutRequestID` | string | Unique identifier for the checkout/payment request |
+| `ResponseCode` | string | Response code from M-Pesa API (0 indicates success) |
 | `ResponseDescription` | string | Description of the response status |
-| `CustomerMessage` | string | User-friendly message about the transaction |
+| `CustomerMessage` | string | Message that can be displayed to the customer |
 
 #### Examples
 
 ```typescript
-// Basic payment request
+// Basic STK Push request
 try {
     const result = await stkPush.sendStkPush(
-        '174379',
-        'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919',
-        100, // Amount in KES
-        '254712345678',
-        'https://example.com/callback',
-        'INV001',
-        'Test Payment'
+        100, // amount
+        'Payment for services',  // transaction description
+        'INV123456789', // account reference
     );
-    console.log('Payment initiated:', result.CheckoutRequestID);
+    console.log('Payment initiated successfully!');
+    console.log('Checkout Request ID:', result.CheckoutRequestID);
 } catch (error) {
-    console.error('Payment failed:', error);
+    console.error('Payment request failed:', error.message);
 }
 
-// With input validation
-const initiatePayment = async (phoneNumber: string, amount: number) => {
-    // Validate phone number format
-    if (!phoneNumber.match(/^254[0-9]{9}$/)) {
-        throw new ValidationError('Invalid phone number format', 'phoneNumber');
-    }
-
-    // Validate amount
-    if (amount <= 0 || amount > 150000) {
-        throw new ValidationError('Amount must be between 1 and 150,000', 'amount');
-    }
-
-    return stkPush.sendStkPush(
-        process.env.MPESA_BUSINESS_SHORTCODE!,
-        process.env.MPESA_PASSKEY!,
-        amount,
-        phoneNumber,
-        process.env.MPESA_CALLBACK_URL!,
-        `INV${Date.now()}`,
-        'Payment'
+// With all parameters specified
+try {
+    const result = await stkPush.sendStkPush(
+        500.50,
+        'Coffee payment',
+        'ORD98765',
+        '174379', // business short code
+        'bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919', // passkey
+        '251712345678', // phone number
+        'https://example.com/mpesa/callback' // callback URL
     );
-};
+    
+    // Store the checkout request ID for later status check
+    saveCheckoutRequestId(result.CheckoutRequestID);
+} catch (error) {
+    handlePaymentError(error);
+}
 ```
 
 ## Error Handling
@@ -150,48 +137,39 @@ const initiatePayment = async (phoneNumber: string, amount: number) => {
 The `StkPush` class can throw several types of errors:
 
 ### ValidationError
-Thrown when input parameters are invalid.
+Thrown when input parameters fail validation checks.
 
 ```typescript
 try {
-    await stkPush.sendStkPush(/* ... */);
+    await stkPush.sendStkPush(amount, desc, ref, businessCode, passkey, phone, callback);
 } catch (error) {
     if (error instanceof ValidationError) {
-        console.error(`Validation failed for ${error.field}:`, error.message);
+        console.error(`Validation failed for ${error.field}: ${error.message}`);
+        
         // Handle specific validation errors
-        switch (error.field) {
-            case 'phoneNumber':
-                // Prompt user to correct phone number
-                break;
-            case 'amount':
-                // Show valid amount range
-                break;
+        if (error.field === 'phoneNumber') {
+            alert('Please provide a valid phone number in the format 251XXXXXXXXX');
+        } else if (error.field === 'amount') {
+            alert('Amount must be greater than zero');
         }
     }
 }
 ```
 
 ### StkPushError
-Thrown for M-Pesa API-specific errors.
+Thrown when the M-Pesa API returns an error response for the STK Push request.
 
 ```typescript
 try {
-    await stkPush.sendStkPush(/* ... */);
+    await stkPush.sendStkPush(amount, desc, ref);
 } catch (error) {
     if (error instanceof StkPushError) {
-        console.error(
-            `Transaction failed: ${error.message}`,
-            `Request ID: ${error.merchantRequestId}`,
-            `Response Code: ${error.responseCode}`
-        );
-        // Handle specific response codes
-        switch (error.responseCode) {
-            case '1032':
-                console.error('Transaction cancelled by user');
-                break;
-            case '1037':
-                console.error('Timeout waiting for user input');
-                break;
+        console.error(`STK Push error: ${error.message}`);
+        console.error(`Error code: ${error.errorCode}`);
+        
+        // Handle specific STK Push errors
+        if (error.errorCode === '500.001.1001') {
+            console.error('Invalid credentials');
         }
     }
 }
@@ -202,248 +180,234 @@ Thrown when network connectivity issues occur.
 
 ```typescript
 try {
-    await stkPush.sendStkPush(/* ... */);
+    await stkPush.sendStkPush(amount, desc, ref);
 } catch (error) {
     if (error instanceof NetworkError) {
-        console.error('Network issue - retrying payment');
-        // Implement retry logic
+        console.error('Network issue - implementing retry logic');
+        // Implement retry with exponential backoff
+        setTimeout(() => retryPayment(amount, desc, ref), 5000);
+    }
+}
+```
+
+### MpesaError
+Base error type for all other M-Pesa related errors.
+
+```typescript
+try {
+    await stkPush.sendStkPush(amount, desc, ref);
+} catch (error) {
+    if (error instanceof MpesaError) {
+        console.error('M-Pesa error occurred:', error.message);
+    } else {
+        console.error('Unexpected error:', error);
     }
 }
 ```
 
 ## Best Practices
 
-### 1. Input Validation
-Validate inputs before making API calls:
+### 1. Proper Error Handling
+
+Implement robust error handling to provide clear feedback:
 
 ```typescript
-class PaymentValidator {
-    static validatePhoneNumber(phoneNumber: string): boolean {
-        return /^254[0-9]{9}$/.test(phoneNumber);
+const initiatePayment = async (amount, description, reference, phone) => {
+    try {
+        const result = await stkPush.sendStkPush(
+            amount, 
+            description, 
+            reference,
+            undefined, // Use environment variable for business code
+            undefined, // Use environment variable for passkey
+            phone
+        );
+        
+        return {
+            success: true,
+            checkoutRequestId: result.CheckoutRequestID,
+            message: 'Payment request sent successfully'
+        };
+    } catch (error) {
+        if (error instanceof ValidationError) {
+            return {
+                success: false,
+                field: error.field,
+                message: error.message
+            };
+        } else if (error instanceof NetworkError) {
+            return {
+                success: false,
+                retry: true,
+                message: 'Network issue occurred. Please try again.'
+            };
+        } else if (error instanceof StkPushError) {
+            return {
+                success: false,
+                errorCode: error.errorCode,
+                message: 'Payment service error: ' + error.message
+            };
+        } else {
+            return {
+                success: false,
+                message: 'An unexpected error occurred'
+            };
+        }
     }
-
-    static validateAmount(amount: number): boolean {
-        return amount > 0 && amount <= 150000;
-    }
-
-    static validateReference(reference: string): boolean {
-        return reference.length <= 12;
-    }
-
-    static validateDescription(desc: string): boolean {
-        return desc.length <= 13;
-    }
-}
-
-// Usage
-const initiatePayment = async (data: PaymentData) => {
-    if (!PaymentValidator.validatePhoneNumber(data.phoneNumber)) {
-        throw new ValidationError('Invalid phone number', 'phoneNumber');
-    }
-    // ... other validations
 };
 ```
 
-### 2. Callback URL Handling
-Implement robust callback handling:
+### 2. Environment-Based Configuration
+
+Use different configurations for development and production:
 
 ```typescript
-// Express.js callback handler
-app.post('/mpesa/callback', express.json(), (req, res) => {
-    const {
-        Body: {
-            stkCallback: {
-                MerchantRequestID,
-                CheckoutRequestID,
-                ResultCode,
-                ResultDesc
-            }
-        }
-    } = req.body;
-
-    // Process callback
-    if (ResultCode === 0) {
-        // Payment successful
-        await processSuccessfulPayment({
-            requestId: MerchantRequestID,
-            checkoutId: CheckoutRequestID
-        });
-    } else {
-        // Payment failed
-        await processFailedPayment({
-            requestId: MerchantRequestID,
-            resultCode: ResultCode,
-            resultDesc: ResultDesc
-        });
-    }
-
-    res.json({ success: true });
-});
+const auth = new Auth();
+const stkPush = new StkPush(
+    auth,
+    process.env.NODE_ENV !== 'production'
+);
 ```
 
-### 3. Transaction Tracking
-Maintain transaction records:
+### 3. Secure Parameter Handling
+
+Use environment variables for sensitive information:
 
 ```typescript
-class TransactionTracker {
-    private transactions: Map<string, {
-        checkoutRequestId: string;
-        amount: number;
-        timestamp: number;
-        status: 'pending' | 'completed' | 'failed';
-    }> = new Map();
+// In your .env file
+MPESA_BUSINESS_SHORTCODE=174379
+MPESA_PASSKEY=bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919
+MPESA_CALLBACK_URL=https://example.com/mpesa/callback
 
-    async trackPayment(merchantRequestId: string, data: PaymentData) {
-        this.transactions.set(merchantRequestId, {
-            checkoutRequestId: data.checkoutRequestId,
-            amount: data.amount,
-            timestamp: Date.now(),
-            status: 'pending'
-        });
-    }
-
-    async updateStatus(merchantRequestId: string, status: 'completed' | 'failed') {
-        const tx = this.transactions.get(merchantRequestId);
-        if (tx) {
-            tx.status = status;
-            this.transactions.set(merchantRequestId, tx);
-        }
-    }
-}
+// In your code
+const stkPush = new StkPush(auth);
+const result = await stkPush.sendStkPush(
+    amount,
+    description,
+    reference
+);
 ```
 
-### 4. Error Recovery
-Implement retry logic for recoverable errors:
+### 4. Rate Limiting
 
-```typescript
-const initiatePaymentWithRetry = async (
-    params: PaymentParams,
-    maxRetries = 3
-): Promise<StkPushResponse> => {
-    let lastError: Error | null = null;
-    
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
-        try {
-            return await stkPush.sendStkPush(/* ... */);
-        } catch (error) {
-            lastError = error;
-            
-            if (error instanceof NetworkError) {
-                // Wait before retrying
-                await new Promise(resolve => 
-                    setTimeout(resolve, attempt * 1000)
-                );
-                continue;
-            }
-            
-            // Don't retry other types of errors
-            throw error;
-        }
-    }
-    
-    throw lastError;
-};
-```
-
-## Rate Limiting
-
-The STK Push class includes built-in rate limiting to prevent API abuse. Requests are automatically rate-limited based on M-Pesa's guidelines.
-
-```typescript
-// Rate limiting is handled automatically
-const payments = await Promise.all([
-    stkPush.sendStkPush(/* ... */), // First request proceeds
-    stkPush.sendStkPush(/* ... */), // Second request is rate-limited
-    stkPush.sendStkPush(/* ... */)  // Third request is rate-limited
-]);
-```
+The StkPush class includes built-in rate limiting to prevent API abuse. Payment requests are automatically rate-limited based on M-Pesa's guidelines.
 
 ## Integration Examples
 
-### Express.js Integration
-Example of integrating STK Push in an Express.js application:
+### Express.js Route Handler
+
+Example of using StkPush in an Express.js route:
 
 ```typescript
-const express = require('express');
-const { Auth, StkPush } = require('mpesajs');
+// payment.controller.ts
+import { Request, Response } from 'express';
+import { Auth, StkPush, ValidationError, StkPushError, NetworkError } from 'mpesajs';
 
-const app = express();
 const auth = new Auth();
 const stkPush = new StkPush(auth);
 
-app.post('/payment', async (req, res) => {
+export const initiatePayment = async (req: Request, res: Response) => {
+    const { amount, phoneNumber, description, reference } = req.body;
+    
     try {
-        const { phoneNumber, amount } = req.body;
-        
         const result = await stkPush.sendStkPush(
-            process.env.MPESA_BUSINESS_SHORTCODE!,
-            process.env.MPESA_PASSKEY!,
             amount,
-            phoneNumber,
-            `${req.protocol}://${req.get('host')}/callback`,
-            `INV${Date.now()}`,
-            'Payment'
+            description,
+            reference,
+            undefined,
+            undefined,
+            phoneNumber
         );
         
-        res.json({
+        res.status(200).json({
             success: true,
-            checkoutRequestId: result.CheckoutRequestID
+            checkoutRequestId: result.CheckoutRequestID,
+            message: 'Payment request sent successfully'
         });
     } catch (error) {
-        res.status(400).json({
-            success: false,
-            error: error.message
-        });
+        if (error instanceof ValidationError) {
+            res.status(400).json({
+                success: false,
+                field: error.field,
+                message: error.message
+            });
+        } else if (error instanceof NetworkError) {
+            res.status(503).json({
+                success: false,
+                message: 'Service temporarily unavailable. Please try again.'
+            });
+        } else if (error instanceof StkPushError) {
+            res.status(400).json({
+                success: false,
+                errorCode: error.errorCode,
+                message: error.message
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                message: 'An unexpected error occurred'
+            });
+        }
     }
-});
+};
 ```
 
-### React Integration
-Example of using STK Push in a React application:
+### React Hook
+
+Example of a React hook for using STK Push:
 
 ```typescript
-const PaymentForm: React.FC = () => {
+// useMpesaPayment.ts
+import { useState } from 'react';
+import { Auth, StkPush } from 'mpesajs';
+
+const auth = new Auth(process.env.REACT_APP_MPESA_CONSUMER_KEY, process.env.REACT_APP_MPESA_CONSUMER_SECRET);
+const stkPush = new StkPush(auth);
+
+export const useMpesaPayment = () => {
     const [loading, setLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
+    const [error, setError] = useState(null);
+    const [result, setResult] = useState(null);
     
-    const handlePayment = async (data: FormData) => {
+    const initiatePayment = async (amount, phoneNumber, description, reference) => {
         setLoading(true);
         setError(null);
         
         try {
-            const response = await fetch('/api/payment', {
+            const response = await fetch('/api/mpesa/initiate', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    phoneNumber: data.phoneNumber,
-                    amount: data.amount
-                })
+                    amount,
+                    phoneNumber,
+                    description,
+                    reference
+                }),
             });
             
-            const result = await response.json();
+            const data = await response.json();
             
-            if (!result.success) {
-                throw new Error(result.error);
+            if (!response.ok) {
+                throw new Error(data.message || 'Payment initiation failed');
             }
             
-            // Show success message
-        } catch (error) {
-            setError(error.message);
+            setResult(data);
+            return data;
+        } catch (err) {
+            setError(err.message);
+            throw err;
         } finally {
             setLoading(false);
         }
     };
     
-    return (
-        <form onSubmit={handlePayment}>
-            {/* Form fields */}
-            {error && <div className="error">{error}</div>}
-            <button type="submit" disabled={loading}>
-                {loading ? 'Processing...' : 'Pay'}
-            </button>
-        </form>
-    );
+    return {
+        initiatePayment,
+        loading,
+        error,
+        result
+    };
 };
-``` 
+```

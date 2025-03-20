@@ -3,20 +3,19 @@
 The `RegisterUrl` class enables businesses to register their callback URLs for receiving M-Pesa transaction notifications and validation requests.
 
 ## Class: RegisterUrl
-
 ```typescript
 class RegisterUrl {
     constructor(
-        apiKey?: string,
-        sandbox?: boolean
+        apiKey: string,   // from env var MPESA_CONSUMER_KEY
+        sandbox: boolean  // from env var MPESA_SANDBOX
     );
 
     public async register(
-        shortCode?: string,
-        responseType?: 'Completed' | 'Cancelled',
-        commandId?: 'RegisterURL',
-        confirmationUrl?: string,
-        validationUrl?: string
+        shortCode: string, // from env var MPESA_BUSINESS_SHORTCODE
+        responseType: 'Completed' | 'Cancelled', // from env var MPESA_REGISTER_URL_RESPONSE_TYPE
+        commandId: 'RegisterURL',  // from env var MPESA_REGISTER_URL_COMMAND_ID
+        confirmationUrl: string,  // from env var MPESA_CONFIRMATION_URL
+        validationUrl: string    // from env var MPESA_VALIDATION_URL
     ): Promise<RegisterUrlResponse>;
 }
 
@@ -66,11 +65,11 @@ Registers validation and confirmation URLs with M-Pesa.
 
 ```typescript
 public async register(
-    shortCode?: string,
-    responseType?: 'Completed' | 'Cancelled',
-    commandId?: 'RegisterURL',
-    confirmationUrl?: string,
-    validationUrl?: string
+    shortCode: string, // from env var MPESA_BUSINESS_SHORTCODE
+    responseType: 'Completed' | 'Cancelled', // from env var MPESA_REGISTER_URL_RESPONSE_TYPE
+    commandId: 'RegisterURL', // from env var MPESA_REGISTER_URL_COMMAND_ID
+    confirmationUrl: string, // from env var MPESA_CONFIRMATION_URL
+    validationUrl: string // from env var MPESA_VALIDATION_URL
 ): Promise<RegisterUrlResponse>;
 ```
 
